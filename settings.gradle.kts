@@ -1,8 +1,18 @@
-pluginManagement{
-    repositories{
+pluginManagement {
+    repositories {
         google()
-        mavanCentral()
+        mavenCentral()
         gradlePluginPortal()
     }
 }
 
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "MindLol"
+include(":app")
