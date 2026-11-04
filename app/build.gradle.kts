@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.abhijith.mindlol"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.abhijith.mindlol"
