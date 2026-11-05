@@ -1,6 +1,7 @@
 package com.abhijith.mindlol
 
 import android.content.Context
+import com.abhijith.mindlol.data.db.MindLolDatabase
 import com.abhijith.mindlol.data.usage.UsagePermission
 
 /**
@@ -12,4 +13,7 @@ class AppContainer(context: Context) {
     private val appContext = context.applicationContext
 
     val usagePermission = UsagePermission(appContext)
+
+    // `by lazy`: built on first use, not at app start, so launch stays fast.
+    val database: MindLolDatabase by lazy { MindLolDatabase.build(appContext) }
 }
