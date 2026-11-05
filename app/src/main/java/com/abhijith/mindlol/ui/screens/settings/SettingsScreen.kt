@@ -12,6 +12,9 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.key
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -96,8 +99,11 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
     SettingsContent(
         state = state,
+        message = message,
+        onMessageShown = viewModel::messageShown,
         actions = SettingsActions(
             setWake = viewModel::setWake,
             setBedtime = viewModel::setBedtime,
@@ -131,6 +137,8 @@ data class SettingsActions(
 @Composable
 fun SettingsContent(
     state: SettingsUiState,
+    message: String?,
+    onMessageShown: () -> Unit,
     actions: SettingsActions,
     usageAccessGranted: Boolean,
     onOpenUsageSettings: () -> Unit,
@@ -146,103 +154,120 @@ fun SettingsContent(
     val fake = FakeData.settings
     var theme by rememberSaveable { mutableStateOf(fake.selectedTheme) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-    ) {
-        Spacer(Modifier.height(32.dp))
-        // Tonight's window wins while it applies, so the big number shows what really counts tonight.
-        NightLength(
-            bedMinutes = override?.bedtimeMinutes ?: settings.bedtimeMinutes,
-            wakeMinutes = override?.wakeMinutes ?: settings.wakeMinutes,
-            label = if (override != null) "PHONE-FREE TONIGHT" else "PHONE-FREE EACH NIGHT"
-        )
-
-        SectionLabel("SCHEDULE", Modifier.revealOnEnter(1))
-        SettingRow("Wake up", wake.format(timeFormat), Modifier.revealOnEnter(2)) { editing = EditingTime.WAKE }
-        SettingRow("Bedtime", bed.format(timeFormat), Modifier.revealOnEnter(3)) { editing = EditingTime.BED }
-
-        SectionLabel("TONIGHT IS DIFFERENT", Modifier.revealOnEnter(4))
-        TonightSection(
-            override = override,
-            onToggle = actions.setTonightEnabled,
-            onEditBed = { editing = EditingTime.TONIGHT_BED },
-            onEditWake = { editing = EditingTime.TONIGHT_WAKE },
-            modifier = Modifier.revealOnEnter(5)
-        )
-
-        SectionLabel("LOCKED APPS AND LIMITS", Modifier.revealOnEnter(6))
-        if (state.rules.isEmpty()) {
-            Text(
-                "No apps locked. Add the ones that keep you up.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
+    // A snackbar is a short message that slides up from the bottom and goes away by itself.
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(message) {
+        if (message != null) {
+            snackbar.showSnackbar(message)
+            onMessageShown()
         }
-        // key(): each row is tied to its package, so rows keep their identity when the list re-sorts.
-        state.rules.forEach { rule ->
-            key(rule.packageName) {
-                AppRuleRow(
-                    rule = rule,
-                    onLimitChange = { actions.setLimit(rule.packageName, it) },
-                    onLockChange = { actions.setLocked(rule.packageName, it) }
+    }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+        ) {
+            Spacer(Modifier.height(32.dp))
+            // Tonight's window wins while it applies, so the big number shows what really counts tonight.
+            NightLength(
+                bedMinutes = override?.bedtimeMinutes ?: settings.bedtimeMinutes,
+                wakeMinutes = override?.wakeMinutes ?: settings.wakeMinutes,
+                label = if (override != null) "PHONE-FREE TONIGHT" else "PHONE-FREE EACH NIGHT"
+            )
+
+            SectionLabel("SCHEDULE", Modifier.revealOnEnter(1))
+            SettingRow("Wake up", wake.format(timeFormat), Modifier.revealOnEnter(2)) { editing = EditingTime.WAKE }
+            SettingRow("Bedtime", bed.format(timeFormat), Modifier.revealOnEnter(3)) { editing = EditingTime.BED }
+
+            SectionLabel("TONIGHT IS DIFFERENT", Modifier.revealOnEnter(4))
+            TonightSection(
+                override = override,
+                onToggle = actions.setTonightEnabled,
+                onEditBed = { editing = EditingTime.TONIGHT_BED },
+                onEditWake = { editing = EditingTime.TONIGHT_WAKE },
+                modifier = Modifier.revealOnEnter(5)
+            )
+
+            SectionLabel("LOCKED APPS AND LIMITS", Modifier.revealOnEnter(6))
+            if (state.rules.isEmpty()) {
+                Text(
+                    "No apps locked. Add the ones that keep you up.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
-        }
-        OutlinedButton(
-            onClick = { pickingApp = true },
-            enabled = state.addableApps.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        ) {
-            Text("Add app")
-        }
-
-        SectionLabel("ROAST INTENSITY", Modifier.revealOnEnter(7))
-        RoastIntensitySelector(selected = settings.roastIntensity, onSelect = actions.setRoastIntensity)
-
-        SectionLabel("PERMISSIONS", Modifier.revealOnEnter(8))
-        PermissionRow(
-            permission = PermissionInfo(
-                name = "Usage access",
-                reason = "To count screen time per app",
-                status = if (usageAccessGranted) "Allowed" else "Not granted"
-            ),
-            onClick = onOpenUsageSettings
-        )
-        fake.permissions.forEach { PermissionRow(it) }
-
-        SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
-        BackgroundLimitsSection(onOpenAppSettings)
-
-        SectionLabel("THEME", Modifier.revealOnEnter(10))
-        fake.themeOptions.forEachIndexed { i, name ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = theme == i, role = Role.RadioButton) { theme = i }
-                    .padding(vertical = 4.dp)
-            ) {
-                // onClick = null: the whole row handles the tap, so the touch target is bigger.
-                RadioButton(selected = theme == i, onClick = null)
-                Spacer(Modifier.width(12.dp))
-                Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+            // key(): each row is tied to its package, so rows keep their identity when the list re-sorts.
+            state.rules.forEach { rule ->
+                key(rule.packageName) {
+                    AppRuleRow(
+                        rule = rule,
+                        onLimitChange = { actions.setLimit(rule.packageName, it) },
+                        onLockChange = { actions.setLocked(rule.packageName, it) }
+                    )
+                }
             }
-        }
+            OutlinedButton(
+                onClick = { pickingApp = true },
+                enabled = state.addableApps.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Text("Add app")
+            }
 
-        Spacer(Modifier.height(40.dp))
-        Text(
-            text = "Theme is preview only. Everything else is saved.",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(32.dp))
+            SectionLabel("ROAST INTENSITY", Modifier.revealOnEnter(7))
+            RoastIntensitySelector(selected = settings.roastIntensity, onSelect = actions.setRoastIntensity)
+
+            SectionLabel("PERMISSIONS", Modifier.revealOnEnter(8))
+            PermissionRow(
+                permission = PermissionInfo(
+                    name = "Usage access",
+                    reason = "To count screen time per app",
+                    status = if (usageAccessGranted) "Allowed" else "Not granted"
+                ),
+                onClick = onOpenUsageSettings
+            )
+            fake.permissions.forEach { PermissionRow(it) }
+
+            SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
+            BackgroundLimitsSection(onOpenAppSettings)
+
+            SectionLabel("THEME", Modifier.revealOnEnter(10))
+            fake.themeOptions.forEachIndexed { i, name ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = theme == i, role = Role.RadioButton) { theme = i }
+                        .padding(vertical = 4.dp)
+                ) {
+                    // onClick = null: the whole row handles the tap, so the touch target is bigger.
+                    RadioButton(selected = theme == i, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                }
+            }
+
+            Spacer(Modifier.height(40.dp))
+            Text(
+                text = "Theme is preview only. Everything else is saved.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(32.dp))
+        }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp)) { data ->
+            Snackbar(
+                snackbarData = data,
+                containerColor = MaterialTheme.colorScheme.onBackground,
+                contentColor = MaterialTheme.colorScheme.background
+            )
+        }
     }
 
     editing?.let { which ->
@@ -596,6 +621,8 @@ private fun TimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfir
 private fun SettingsContentPreview() {
     MindLolTheme {
         SettingsContent(
+            message = null,
+            onMessageShown = {},
             state = SettingsUiState(
                 settings = Settings(roastIntensity = RoastIntensity.SAVAGE),
                 rules = listOf(

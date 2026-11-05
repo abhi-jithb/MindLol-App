@@ -26,4 +26,9 @@ object SettingsCodec {
     /** Unknown names (e.g. from a future version) fall back to the default. */
     fun decodeIntensity(stored: String?): RoastIntensity =
         RoastIntensity.entries.firstOrNull { it.name == stored } ?: RoastIntensity.SAVAGE
+
+    /** A set of names as one text column: "a,b,c". Package names never contain commas. */
+    fun joinList(items: Collection<String>): String = items.sorted().joinToString(",")
+
+    fun splitList(text: String): List<String> = text.split(',').map { it.trim() }.filter { it.isNotEmpty() }
 }

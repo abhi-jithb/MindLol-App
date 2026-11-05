@@ -43,7 +43,8 @@ class UsageRepository(
     private val reader: UsageEventsReader,
     private val importer: HistoryImporter,
     private val appNames: AppNames,
-    private val permission: UsagePermission
+    private val permission: UsagePermission,
+    private val cheats: CheatRepository
 ) {
     // Only one refresh at a time (app open and the background worker can overlap).
     private val refreshLock = Mutex()
@@ -54,6 +55,8 @@ class UsageRepository(
     /**
      * Imports old history once, then rebuilds the last [daysBack] days from raw events.
      * Safe to run any number of times: each day's EVENTS rows are replaced, not added to.
+     * Then judges cheats for the same days (see [CheatRepository.judge]); cheats are only ever
+     * added or extended, so repeating this is safe too.
      */
     suspend fun refresh(daysBack: Int = 3) = withContext(Dispatchers.IO) {
         if (!permission.check()) return@withContext
@@ -69,6 +72,8 @@ class UsageRepository(
                 )
             }
         }
+        // After the usage rows are saved, so a judging error can't lose them.
+        cheats.judge(daysBack)
     }
 
     /** True once any usage row exists. Used for the first-launch empty state. */

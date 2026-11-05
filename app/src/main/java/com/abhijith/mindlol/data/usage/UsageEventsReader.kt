@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import com.abhijith.mindlol.domain.AppSession
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -72,6 +73,10 @@ class UsageEventsReader(private val context: Context) {
         val events = readEvents(dayStart - LEAD_IN_MS, dayEnd)
         return SessionPairing.hourlyTotals(events, dayStart, dayEnd, zone, excludedPackages)
     }
+
+    /** Every app session from [fromMs] to [toMs] with exact times, for the rules engine. */
+    fun readSessions(fromMs: Long, toMs: Long): List<AppSession> =
+        SessionPairing.sessions(readEvents(fromMs - LEAD_IN_MS, toMs), fromMs, toMs)
 
     private fun readEvents(startMs: Long, endMs: Long): List<UsageEventRecord> {
         val result = mutableListOf<UsageEventRecord>()

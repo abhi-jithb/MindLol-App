@@ -15,6 +15,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // Runs instrumented tests (app/src/androidTest) on the phone.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -39,8 +41,8 @@ android {
     }
 }
 
-// Room writes a JSON copy of the database schema here. It's committed to git
-// so Phase 5 migrations can be checked against it.
+// Room writes a JSON copy of the database schema here. It's committed to git so
+// migrations can be checked against it (MigrationTest reads these files).
 room {
     schemaDirectory("$projectDir/schemas")
 }
@@ -60,4 +62,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }

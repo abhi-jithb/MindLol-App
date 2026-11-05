@@ -12,5 +12,7 @@ class MindLolApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         UsageSyncWorker.schedule(this)
+        // Rewrite the next night's and day's rules whenever settings change.
+        container.cheatRepository.watchSettings(container.applicationScope)
     }
 }

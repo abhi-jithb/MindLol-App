@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.abhijith.mindlol.data.prefs.AppPrefs
 import com.abhijith.mindlol.data.settings.SettingsRepository
+import com.abhijith.mindlol.data.repository.CheatRepository
 import com.abhijith.mindlol.data.repository.UsageRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.HistoryImporter
@@ -59,7 +60,11 @@ class AppContainer(context: Context) {
         HistoryImporter(appContext, database.usageDao(), prefs) { usageReader.excludedPackages }
     }
 
+    val cheatRepository: CheatRepository by lazy {
+        CheatRepository(database.rulesDao(), settingsRepository, usageReader)
+    }
+
     val usageRepository: UsageRepository by lazy {
-        UsageRepository(database.usageDao(), usageReader, historyImporter, appNames, usagePermission)
+        UsageRepository(database.usageDao(), usageReader, historyImporter, appNames, usagePermission, cheatRepository)
     }
 }

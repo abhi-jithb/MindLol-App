@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.abhijith.mindlol.MindLolApplication
+import com.abhijith.mindlol.data.repository.CheatRepository
 import com.abhijith.mindlol.data.settings.SettingsRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.domain.AppRule
@@ -42,8 +43,17 @@ data class SettingsUiState(
  */
 class SettingsViewModel(
     private val repository: SettingsRepository,
-    private val appNames: AppNames
+    private val appNames: AppNames,
+    private val cheats: CheatRepository
 ) : ViewModel() {
+
+    /** A short note to show once (a snackbar), e.g. "Applies from tomorrow". Null when there is none. */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message
+
+    fun messageShown() {
+        _message.value = null
+    }
 
     private val installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
 
@@ -78,9 +88,10 @@ class SettingsViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
-    fun setBedtime(time: LocalTime) = save { repository.setBedtime(SleepTime.fromLocalTime(time)) }
+    // Night rules (bedtime, wake, locks) always save. If tonight has started they apply from tomorrow night.
+    fun setBedtime(time: LocalTime) = saveNightRule { repository.setBedtime(SleepTime.fromLocalTime(time)) }
 
-    fun setWake(time: LocalTime) = save { repository.setWake(SleepTime.fromLocalTime(time)) }
+    fun setWake(time: LocalTime) = saveNightRule { repository.setWake(SleepTime.fromLocalTime(time)) }
 
     /** Turning it on starts from the normal window; edit the times after. */
     fun setTonightEnabled(enabled: Boolean) {
@@ -100,9 +111,13 @@ class SettingsViewModel(
 
     fun addApp(packageName: String) = addedThisVisit.update { it + packageName }
 
-    fun setLocked(packageName: String, locked: Boolean) = save { repository.setLocked(packageName, locked) }
+    fun setLocked(packageName: String, locked: Boolean) = saveNightRule { repository.setLocked(packageName, locked) }
 
-    fun setLimit(packageName: String, minutes: Int) = save { repository.setLimit(packageName, minutes) }
+    /** Today's limits were frozen at midnight, so a change always applies from tomorrow. */
+    fun setLimit(packageName: String, minutes: Int) = save {
+        repository.setLimit(packageName, minutes)
+        if (cheats.isTodayLocked()) _message.value = APPLIES_TOMORROW
+    }
 
     fun setRoastIntensity(intensity: RoastIntensity) = save { repository.setRoastIntensity(intensity) }
 
@@ -113,17 +128,33 @@ class SettingsViewModel(
         expiresAtMillis = SleepTime.overrideExpiryMillis(System.currentTimeMillis(), wakeMinutes, ZoneId.systemDefault())
     )
 
-    private fun saveOverride(override: TonightOverride?) = save { repository.setTonightOverride(override) }
+    /** The one setting that is refused, not postponed: tonight's override can't change once tonight started. */
+    private fun saveOverride(override: TonightOverride?) = save {
+        if (cheats.isTonightLocked()) {
+            _message.value = TONIGHT_LOCKED
+        } else {
+            repository.setTonightOverride(override)
+        }
+    }
+
+    private fun saveNightRule(block: suspend () -> Unit) = save {
+        block()
+        if (cheats.isTonightLocked()) _message.value = APPLIES_TOMORROW_NIGHT
+    }
 
     private fun save(block: suspend () -> Unit) {
         viewModelScope.launch { block() }
     }
 
     companion object {
+        const val TONIGHT_LOCKED = "Tonight's rules are locked in. Nice try."
+        const val APPLIES_TOMORROW_NIGHT = "Applies from tomorrow night"
+        const val APPLIES_TOMORROW = "Applies from tomorrow"
+
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as MindLolApplication
-                SettingsViewModel(app.container.settingsRepository, app.container.appNames)
+                SettingsViewModel(app.container.settingsRepository, app.container.appNames, app.container.cheatRepository)
             }
         }
     }
