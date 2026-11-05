@@ -41,28 +41,37 @@ class InterrogationCardsTest {
     @Test
     fun personalCards_onlyWithPersonalIntensity() {
         (0L..50L).forEach { seed ->
-            assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, emptySet(), seed)?.id)
-            assertEquals("brain", InterrogationCards.pick(RoastIntensity.MILD, emptySet(), seed)?.id)
+            assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, emptyList(), seed)?.id)
+            assertEquals("brain", InterrogationCards.pick(RoastIntensity.MILD, emptyList(), seed)?.id)
         }
-        val personal = (0L..50L).mapNotNull { InterrogationCards.pick(RoastIntensity.PERSONAL, emptySet(), it)?.id }.toSet()
+        val personal = (0L..50L).mapNotNull { InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), it)?.id }.toSet()
         assertTrue(personal.size > 1) // personal cards do show up
     }
 
     @Test
     fun noRepeatSameNight() {
-        val shown = setOf("brain", "girlfriend", "exes")
+        val shown = listOf("brain", "girlfriend", "exes")
         (0L..50L).forEach { assertEquals("loyal", InterrogationCards.pick(RoastIntensity.PERSONAL, shown, it)?.id) }
     }
 
     @Test
-    fun everyCardShownTonight_skipsTheStep() {
-        assertNull(InterrogationCards.pick(RoastIntensity.SAVAGE, setOf("brain"), 1L))
-        assertNull(InterrogationCards.pick(RoastIntensity.PERSONAL, cards.map { it.id }.toSet(), 1L))
+    fun everyCardShownTonight_repeatsTheOneShownLongestAgo_neverSkips() {
+        // SAVAGE has one allowed card: it keeps coming back.
+        assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("brain"), 1L)?.id)
+        assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("brain", "brain", "brain"), 7L)?.id)
+        // PERSONAL, all four shown (exes twice): brain's last showing is the oldest.
+        val shown = listOf("exes", "brain", "girlfriend", "loyal", "exes")
+        (0L..20L).forEach { assertEquals("brain", InterrogationCards.pick(RoastIntensity.PERSONAL, shown, it)?.id) }
+    }
+
+    @Test
+    fun noCardsAtAll_isTheOnlyNull() {
+        assertNull(InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), 1L, cards = emptyList()))
     }
 
     @Test
     fun sameSeed_sameCard() {
-        val a = InterrogationCards.pick(RoastIntensity.PERSONAL, emptySet(), 1_793_873_924_724L)
-        repeat(3) { assertEquals(a, InterrogationCards.pick(RoastIntensity.PERSONAL, emptySet(), 1_793_873_924_724L)) }
+        val a = InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), 1_793_873_924_724L)
+        repeat(3) { assertEquals(a, InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), 1_793_873_924_724L)) }
     }
 }

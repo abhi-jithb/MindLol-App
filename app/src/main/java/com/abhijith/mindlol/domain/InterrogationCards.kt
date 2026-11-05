@@ -65,20 +65,26 @@ object InterrogationCards {
     )
 
     /**
-     * The card for this unlock: personal cards only with PERSONAL intensity, never one already
-     * shown tonight ([shownTonight] = card ids from tonight's lock_event rows). The choice looks
-     * random but is fixed by [seed] (the lock screen's shown time), so it survives a rotation.
-     * Null when every allowed card was already shown tonight: the step is then skipped.
+     * The card for this unlock. Personal cards only with PERSONAL intensity.
+     * - A card not shown tonight is preferred. The choice looks random but is fixed by [seed]
+     *   (the lock screen's shown time), so it survives a rotation.
+     * - If every allowed card was already shown tonight, the one shown longest ago comes back:
+     *   the interrogation never disappears on repeat unlocks.
+     *
+     * @param shownTonight card ids from tonight's lock_event rows, oldest first (repeats allowed).
+     * @return null only if no card is allowed at all (an empty card list).
      */
     fun pick(
         intensity: RoastIntensity,
-        shownTonight: Set<String>,
+        shownTonight: List<String>,
         seed: Long,
         cards: List<InterrogationCard> = this.cards
     ): InterrogationCard? {
-        val allowed = cards.filter { (!it.personal || intensity == RoastIntensity.PERSONAL) && it.id !in shownTonight }
-        if (allowed.isEmpty()) return null
-        return allowed[Math.floorMod(seed.hashCode(), allowed.size)]
+        val allowed = cards.filter { !it.personal || intensity == RoastIntensity.PERSONAL }
+        val fresh = allowed.filter { it.id !in shownTonight }
+        if (fresh.isNotEmpty()) return fresh[Math.floorMod(seed.hashCode(), fresh.size)]
+        // All shown: the card whose latest showing is the oldest.
+        return allowed.minByOrNull { card -> shownTonight.lastIndexOf(card.id) }
     }
 
     fun reply(answer: CardAnswer, appName: String): String = answer.reply.replace("{app}", appName)
