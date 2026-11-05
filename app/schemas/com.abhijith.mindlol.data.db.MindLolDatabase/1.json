@@ -1,0 +1,110 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "470dcbe2133b52eb44893555e9666b89",
+    "entities": [
+      {
+        "tableName": "app_usage",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `packageName` TEXT NOT NULL, `source` TEXT NOT NULL, `foregroundMs` INTEGER NOT NULL, `periodEnd` TEXT NOT NULL, PRIMARY KEY(`date`, `packageName`, `source`))",
+        "fields": [
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "packageName",
+            "columnName": "packageName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "foregroundMs",
+            "columnName": "foregroundMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodEnd",
+            "columnName": "periodEnd",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "date",
+            "packageName",
+            "source"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_app_usage_date",
+            "unique": false,
+            "columnNames": [
+              "date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_app_usage_date` ON `${TABLE_NAME}` (`date`)"
+          }
+        ]
+      },
+      {
+        "tableName": "daily_summary",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`date` TEXT NOT NULL, `source` TEXT NOT NULL, `totalMs` INTEGER NOT NULL, `unlocks` INTEGER, `periodEnd` TEXT NOT NULL, PRIMARY KEY(`date`, `source`))",
+        "fields": [
+          {
+            "fieldPath": "date",
+            "columnName": "date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalMs",
+            "columnName": "totalMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unlocks",
+            "columnName": "unlocks",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "periodEnd",
+            "columnName": "periodEnd",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "date",
+            "source"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '470dcbe2133b52eb44893555e9666b89')"
+    ]
+  }
+}

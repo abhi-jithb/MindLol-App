@@ -22,7 +22,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.abhijith.mindlol.data.repository.FakeData
 import com.abhijith.mindlol.domain.StatsPeriod
 import com.abhijith.mindlol.domain.UsageSeries
 import com.abhijith.mindlol.ui.theme.MindLolTheme
@@ -89,6 +88,10 @@ fun UsageBarChart(series: UsageSeries, modifier: Modifier = Modifier) {
             val t = Motion.Standard.transform(((progress.value - start) / 0.65f).coerceIn(0f, 1f))
             val h = chartH * (minutes / maxMinutes) * t
             val left = i * slot + (slot - barW) / 2
+            if (minutes == 0) {
+                // Empty bucket: a small dot on the baseline, so the gap reads as "nothing", not "broken".
+                drawCircle(gridColor, radius = 1.5.dp.toPx(), center = Offset(left + barW / 2, chartH - 1.5.dp.toPx()), alpha = progress.value)
+            }
             drawRoundRect(
                 color = if (i == series.peakIndex) peakColor else barColor,
                 topLeft = Offset(left, chartH - h),
@@ -113,5 +116,11 @@ fun UsageBarChart(series: UsageSeries, modifier: Modifier = Modifier) {
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun UsageBarChartPreview() {
-    MindLolTheme { UsageBarChart(FakeData.series(StatsPeriod.WEEK)) }
+    val sample = UsageSeries(
+        period = StatsPeriod.WEEK,
+        labels = listOf("Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"),
+        minutes = listOf(196, 241, 227, 158, 172, 149, 134),
+        apps = emptyList()
+    )
+    MindLolTheme { UsageBarChart(sample) }
 }

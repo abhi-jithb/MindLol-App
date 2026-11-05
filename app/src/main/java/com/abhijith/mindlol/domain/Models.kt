@@ -11,13 +11,6 @@ data class AppUsage(
     val minutes: Int
 )
 
-data class TodaySummary(
-    val totalMinutes: Int,
-    val reelsCount: Int,
-    val cheatsToday: Int,
-    val topApps: List<AppUsage>
-)
-
 enum class StatsPeriod(val label: String, val bucketName: String) {
     DAY("Day", "hour"),
     WEEK("Week", "day"),
@@ -32,9 +25,16 @@ data class UsageSeries(
     val minutes: List<Int>,
     val apps: List<AppUsage>,
     /** Longer names for the same buckets ("Jul" instead of "J"), for text outside the chart. */
-    val fullLabels: List<String> = labels
+    val fullLabels: List<String> = labels,
+    /** True when some days come from Android's coarse summaries instead of exact events. */
+    val hasEstimates: Boolean = false,
+    /**
+     * Exact total, when known. Summing [minutes] loses the seconds each bar drops when rounded
+     * down (up to 23 minutes for the 24 hourly bars), so real data passes the exact number.
+     */
+    val exactTotalMinutes: Int? = null
 ) {
-    val totalMinutes: Int get() = minutes.sum()
+    val totalMinutes: Int get() = exactTotalMinutes ?: minutes.sum()
 
     /** Average over buckets that had any use, so empty night hours don't drag it down. */
     val averageMinutes: Int
