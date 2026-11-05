@@ -10,9 +10,11 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import com.abhijith.mindlol.data.prefs.AppPrefs
 import com.abhijith.mindlol.data.settings.SettingsRepository
 import com.abhijith.mindlol.data.repository.CheatRepository
+import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.data.repository.UsageRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.HistoryImporter
+import com.abhijith.mindlol.data.usage.SystemApps
 import com.abhijith.mindlol.data.usage.UsageEventsReader
 import com.abhijith.mindlol.data.usage.UsagePermission
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -62,6 +64,10 @@ class AppContainer(context: Context) {
 
     val cheatRepository: CheatRepository by lazy {
         CheatRepository(database.rulesDao(), settingsRepository, usageReader, appNames, prefs)
+    }
+
+    val liveLockRepository: LiveLockRepository by lazy {
+        LiveLockRepository(database.rulesDao(), database.lockDao(), usageReader, SystemApps(appContext))
     }
 
     val usageRepository: UsageRepository by lazy {

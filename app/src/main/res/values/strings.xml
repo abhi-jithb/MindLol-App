@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shown in Settings → Accessibility under MindLol's live lock. -->
+    <string name="lock_service_description">MindLol\'s live lock. It only watches which app comes to the front, so it can cover apps you locked for your sleep window or that went past your own daily limit. It never reads what is on screen, and nothing leaves your phone.</string>
+</resources>

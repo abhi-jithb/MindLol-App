@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The live lock's accessibility settings (Phase 3b). Deliberately minimal:
+    - only window state changes (which app came to the front), no other events
+    - canRetrieveWindowContent="false": the service can't read what is on screen (Phase 4 may change this)
+    - isAccessibilityTool="false": honest about it not being an accessibility tool
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="100"
+    android:description="@string/lock_service_description" />
