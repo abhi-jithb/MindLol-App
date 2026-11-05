@@ -24,8 +24,9 @@ class RulesPlannerTest {
         stored: List<RulesSnapshot> = emptyList(),
         storedCheats: List<Cheat> = emptyList(),
         sessions: List<AppSession> = emptyList(),
-        firstDate: LocalDate = wed
-    ) = RulesPlanner.plan(now, zone, settings, firstDate, stored, storedCheats, sessions)
+        firstDate: LocalDate = wed,
+        rulesSince: Long = 0L // rules existed "forever", unless a test says otherwise
+    ) = RulesPlanner.plan(now, zone, settings, firstDate, stored, storedCheats, sessions, rulesSince)
 
     private fun PlanResult.snapshot(kind: PeriodKind, date: LocalDate) =
         snapshots.firstOrNull { it.kind == kind && it.date == date }
@@ -300,5 +301,29 @@ class RulesPlannerTest {
         assertEquals(saved.key, cheat.key)
         assertEquals(at(thu, 15, 10), cheat.startMillis) // the logged crossing time stays
         assertEquals(35, cheat.minutes)
+    }
+
+    // ---------- No rules, no cheats ----------
+
+    @Test
+    fun periodBeforeFirstEverSnapshot_isNeverJudged() {
+        // Rules first saved Thursday 15:00. Instagram locked, 30-min limit.
+        val settings = Settings(lockedApps = setOf(INSTA), appLimits = mapOf(INSTA to 30))
+        val result = plan(
+            now = at(fri, 12),
+            settings = settings,
+            rulesSince = at(thu, 15),
+            sessions = listOf(
+                session(INSTA, at(thu, 1), at(thu, 1, 30)),   // Wednesday night: before any rules
+                session(INSTA, at(thu, 10), at(thu, 11)),     // Thursday's day began at midnight: before any rules
+                session(INSTA, at(fri, 0, 30), at(fri, 0, 40)) // Thursday night began 23:00: after rules → cheat
+            )
+        )
+        val cheat = result.cheats.single()
+        assertEquals(CheatType.BEDTIME, cheat.type)
+        assertEquals(thu, cheat.periodDate)
+        // Nothing is saved for the skipped periods either, so streaks never count them.
+        assertNull(result.snapshot(PeriodKind.NIGHT, wed))
+        assertNull(result.snapshot(PeriodKind.DAY, thu))
     }
 }

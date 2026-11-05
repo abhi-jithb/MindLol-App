@@ -14,7 +14,19 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_HISTORY_IMPORTED, false)
         set(value) = prefs.edit().putBoolean(KEY_HISTORY_IMPORTED, value).apply()
 
+    /**
+     * When rules snapshots were first ever saved (epoch millis), or null before that.
+     * Periods that started earlier had no rules, so they are never judged.
+     */
+    var rulesSinceMillis: Long?
+        get() = if (prefs.contains(KEY_RULES_SINCE)) prefs.getLong(KEY_RULES_SINCE, 0L) else null
+        set(value) {
+            if (value == null) prefs.edit().remove(KEY_RULES_SINCE).apply()
+            else prefs.edit().putLong(KEY_RULES_SINCE, value).apply()
+        }
+
     private companion object {
         const val KEY_HISTORY_IMPORTED = "history_imported"
+        const val KEY_RULES_SINCE = "rules_since_millis"
     }
 }

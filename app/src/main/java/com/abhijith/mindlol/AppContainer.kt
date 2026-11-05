@@ -61,7 +61,7 @@ class AppContainer(context: Context) {
     }
 
     val cheatRepository: CheatRepository by lazy {
-        CheatRepository(database.rulesDao(), settingsRepository, usageReader, appNames)
+        CheatRepository(database.rulesDao(), settingsRepository, usageReader, appNames, prefs)
     }
 
     val usageRepository: UsageRepository by lazy {

@@ -14,6 +14,9 @@ import java.time.ZoneId
  *
  * Snapshots are written ahead of time (on every settings change and refresh), so a night is
  * frozen with the right rules even if no refresh runs during it.
+ *
+ * 3. "No rules, no cheats." A period that started before the first snapshot was ever saved
+ *    ([plan]'s rulesSinceMillis) is never judged: no rules existed then.
  */
 object RulesPlanner {
 
@@ -56,6 +59,7 @@ object RulesPlanner {
      * @param stored saved snapshot rows (at least those from [firstDate] on).
      * @param storedCheats saved cheats of the periods being judged, so new findings extend them.
      * @param sessions app sessions covering the periods, with a session still open ending at [nowMillis].
+     * @param rulesSinceMillis when snapshots were first ever saved. Periods that started before it are skipped.
      */
     fun plan(
         nowMillis: Long,
@@ -64,7 +68,8 @@ object RulesPlanner {
         firstDate: LocalDate,
         stored: List<RulesSnapshot>,
         storedCheats: List<Cheat>,
-        sessions: List<AppSession>
+        sessions: List<AppSession>,
+        rulesSinceMillis: Long
     ): PlanResult {
         val upcoming = upcomingSnapshots(nowMillis, zone, settings, stored)
         val rows = (stored + upcoming).associateBy { it.kind to it.date } // upcoming replaces unfrozen stored rows
@@ -80,7 +85,8 @@ object RulesPlanner {
                 val saved = rows[kind to date]
                 // No row and already started: the app didn't run since before it began. Best guess: current settings.
                 val row = saved ?: NightCalendar.build(kind, date, settings, zone)
-                if (!row.finalized && row.hasStarted(nowMillis)) {
+                val beforeAnyRules = row.startMillis < rulesSinceMillis
+                if (!beforeAnyRules && !row.finalized && row.hasStarted(nowMillis)) {
                     val found = when (kind) {
                         PeriodKind.NIGHT -> CheatDetector.bedtimeCheats(row, seen)
                         PeriodKind.DAY -> CheatDetector.limitCheats(row, seen)

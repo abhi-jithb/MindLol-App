@@ -4,6 +4,7 @@ import android.util.Log
 import com.abhijith.mindlol.data.db.RulesDao
 import com.abhijith.mindlol.data.db.toDomain
 import com.abhijith.mindlol.data.db.toEntity
+import com.abhijith.mindlol.data.prefs.AppPrefs
 import com.abhijith.mindlol.data.settings.SettingsRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.UsageEventsReader
@@ -40,7 +41,8 @@ class CheatRepository(
     private val dao: RulesDao,
     private val settingsRepository: SettingsRepository,
     private val reader: UsageEventsReader,
-    private val appNames: AppNames
+    private val appNames: AppNames,
+    private val prefs: AppPrefs
 ) {
     // Judging and writing upcoming snapshots both read-then-write the same rows: one at a time.
     private val lock = Mutex()
@@ -60,7 +62,10 @@ class CheatRepository(
             val storedCheats = dao.cheatsFrom(firstDate).map { it.toDomain() }
             val sessions = reader.readSessions(firstDate.atStartOfDay(zone).toInstant().toEpochMilli(), nowMillis)
 
-            val result = RulesPlanner.plan(nowMillis, zone, settings, firstDate, stored, storedCheats, sessions)
+            val result = RulesPlanner.plan(
+                nowMillis, zone, settings, firstDate, stored, storedCheats, sessions,
+                rulesSinceMillis = rulesSince(nowMillis)
+            )
             dao.saveJudgement(result.snapshots.map { it.toEntity() }, result.cheats.map { it.toEntity() })
         }
     }
@@ -72,6 +77,7 @@ class CheatRepository(
     suspend fun writeUpcoming(settings: Settings, nowMillis: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
         lock.withLock {
             val stored = dao.periodsFrom(today(nowMillis).minusDays(1)).map { it.toDomain() }
+            rulesSince(nowMillis)
             val rows = RulesPlanner.upcomingSnapshots(nowMillis, zone, settings, stored)
             dao.upsertPeriods(rows.map { it.toEntity() })
         }
@@ -140,6 +146,10 @@ class CheatRepository(
     suspend fun isTodayLocked(nowMillis: Long = System.currentTimeMillis()): Boolean = withContext(Dispatchers.IO) {
         dao.period(PeriodKind.DAY, today(nowMillis)) != null
     }
+
+    /** When rules were first saved; recorded the first time snapshots are about to be written. */
+    private fun rulesSince(nowMillis: Long): Long =
+        prefs.rulesSinceMillis ?: nowMillis.also { prefs.rulesSinceMillis = it }
 
     private fun today(nowMillis: Long): LocalDate =
         Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
