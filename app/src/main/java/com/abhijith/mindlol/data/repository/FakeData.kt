@@ -14,7 +14,6 @@ object FakeData {
     // ---------- Home extras (Phase 3–4 will make these real) ----------
 
     val reelsToday = 87
-    val cheatsToday = 2
 
     // ---------- Profile ----------
 
