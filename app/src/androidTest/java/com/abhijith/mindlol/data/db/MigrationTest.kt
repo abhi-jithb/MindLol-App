@@ -9,8 +9,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Checks the v1 → v2 upgrade on a real device: builds a v1 database from 1.json, runs the
- * AutoMigration, then checks the result matches 2.json and the old rows survived.
+ * Checks the upgrades on a real device: builds an old database from its exported schema file
+ * (1.json, 2.json), runs the AutoMigrations, then checks the result matches the newer schema
+ * and the old rows survived.
  * Uses its own test database file, never the app's mindlol.db.
  */
 @RunWith(AndroidJUnit4::class)
@@ -58,6 +59,33 @@ class MigrationTest {
             it.moveToFirst()
             assertEquals(1, it.getInt(0))
             assertEquals(5, it.getInt(1))
+        }
+        db.close()
+    }
+
+    @Test
+    fun migrate2To3_keepsCheatsAndSnapshots_andAddsLockTables() {
+        helper.createDatabase(DB, 2).apply {
+            execSQL("INSERT INTO judged_period (kind, date, startMillis, endMillis, overrideApplied, lockedApps, limits, finalized) VALUES ('NIGHT', '2026-11-05', 1, 2, 0, 'com.instagram.android', '', 1)")
+            execSQL("INSERT INTO cheat (packageName, type, periodDate, firstSeenStartMillis, startMillis, endMillis, minutes) VALUES ('com.instagram.android', 'BEDTIME', '2026-11-05', 1, 1, 2, 7)")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(DB, 3, true)
+        db.query("SELECT minutes FROM cheat").use {
+            it.moveToFirst()
+            assertEquals(7, it.getInt(0))
+        }
+        db.query("SELECT COUNT(*) FROM judged_period").use {
+            it.moveToFirst()
+            assertEquals(1, it.getInt(0))
+        }
+        // The new tables exist, are empty, and accept rows.
+        db.execSQL("INSERT INTO lock_session (connectedAtMillis, lastAliveMillis, disconnectedAtMillis, bootAtMillis) VALUES (10, 20, NULL, 5)")
+        db.execSQL("INSERT INTO lock_event (packageName, reason, periodDate, shownAtMillis, stepReached, outcome, countdownSeconds, grantedMinutes, grantedAtMillis, cardId, cardAnswer) VALUES ('com.instagram.android', 'BEDTIME', '2026-11-05', 30, 1, 'WENT_BACK', 10, NULL, NULL, NULL, NULL)")
+        db.query("SELECT (SELECT COUNT(*) FROM lock_session), (SELECT COUNT(*) FROM lock_event)").use {
+            it.moveToFirst()
+            assertEquals(1, it.getInt(0))
+            assertEquals(1, it.getInt(1))
         }
         db.close()
     }

@@ -11,19 +11,24 @@ import androidx.room.TypeConverters
  * The on-device SQLite database. All data stays on the phone.
  * exportSchema writes app/schemas/<version>.json, committed to git for future migrations.
  *
- * v2 adds the judged_period and cheat tables. It only adds tables, so Room can write the
- * migration itself (AutoMigration) by comparing 1.json with 2.json. Existing usage rows are untouched.
+ * v2 adds the judged_period and cheat tables; v3 adds lock_event and lock_session (the live lock).
+ * Both only add tables, so Room writes the migrations itself (AutoMigration) by comparing the
+ * exported schema files. Existing rows are untouched.
  */
 @Database(
-    entities = [AppUsageEntity::class, DailySummaryEntity::class, JudgedPeriodEntity::class, CheatEntity::class],
-    version = 2,
+    entities = [
+        AppUsageEntity::class, DailySummaryEntity::class, JudgedPeriodEntity::class, CheatEntity::class,
+        LockEventEntity::class, LockSessionEntity::class
+    ],
+    version = 3,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)]
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)]
 )
 @TypeConverters(Converters::class)
 abstract class MindLolDatabase : RoomDatabase() {
     abstract fun usageDao(): UsageDao
     abstract fun rulesDao(): RulesDao
+    abstract fun lockDao(): LockDao
 
     companion object {
         fun build(context: Context): MindLolDatabase =

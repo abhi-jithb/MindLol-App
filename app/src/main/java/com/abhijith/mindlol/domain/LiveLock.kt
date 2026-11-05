@@ -36,6 +36,32 @@ sealed interface LockDecision {
 /** A stretch of time when the live lock wasn't running (service off, or MindLol force-stopped). */
 data class LockOffInterval(val startMillis: Long, val endMillis: Long)
 
+/** How one lock screen ended. */
+enum class LockOutcome {
+    /** Every step done: the app was opened for the chosen minutes. */
+    UNLOCKED,
+    /** "Go back to sleep" pressed: the app was closed. */
+    WENT_BACK,
+    /** Left another way (Home, screen off, switched app) before finishing. */
+    LEFT
+}
+
+/**
+ * One run of the accessibility service, from connect to disconnect (one lock_session row).
+ * [lastAliveMillis] is a heartbeat, written only while it matters ([LiveLockDecider.heartbeatMatters]).
+ * [disconnectedAtMillis] is null when the service died without warning (force-stop, kill, power loss).
+ * [bootAtMillis] is when the phone last booted, as seen at connect time.
+ */
+data class LockSession(
+    val connectedAtMillis: Long,
+    val lastAliveMillis: Long,
+    val disconnectedAtMillis: Long?,
+    val bootAtMillis: Long
+)
+
+/** A stretch with the screen on (from SCREEN_INTERACTIVE to SCREEN_NON_INTERACTIVE usage events). */
+data class ScreenOnInterval(val startMillis: Long, val endMillis: Long)
+
 object LiveLockDecider {
 
     /** Cheats for a disabled lock are stored under MindLol's own package (shown as "MindLol"). */
@@ -43,6 +69,15 @@ object LiveLockDecider {
 
     const val FIRST_COUNTDOWN_SECONDS = 10
     const val MAX_COUNTDOWN_SECONDS = 320
+
+    /** How often the service writes its heartbeat while it matters. */
+    const val HEARTBEAT_INTERVAL_MS = 5 * 60_000L
+
+    /**
+     * After a death without warning, the service is assumed alive until this long after its last
+     * heartbeat (two missed beats), so a heartbeat that's a little late never looks like a gap.
+     */
+    const val HEARTBEAT_SLACK_MS = 2 * HEARTBEAT_INTERVAL_MS
 
     private const val MINUTE_MS = 60_000L
 
@@ -110,14 +145,70 @@ object LiveLockDecider {
     }
 
     /**
-     * The escalation count resets each night: it counts unlocks granted since the start of the
-     * most recent night that has begun. Before any night has begun, everything counts.
+     * The escalation count resets twice a day, at bedtime and at wake time, so nights and days
+     * escalate separately: it counts unlocks granted since the latest bedtime or wake time that
+     * has passed (from saved NIGHT snapshots). Before any of those, everything counts.
      */
     fun unlocksSinceReset(grants: List<UnlockGrant>, nowMillis: Long, storedNights: List<RulesSnapshot>): Int {
         val resetAt = storedNights
-            .filter { it.kind == PeriodKind.NIGHT && it.startMillis <= nowMillis }
-            .maxOfOrNull { it.startMillis } ?: Long.MIN_VALUE
+            .filter { it.kind == PeriodKind.NIGHT }
+            .flatMap { listOf(it.startMillis, it.endMillis) }
+            .filter { it <= nowMillis }
+            .maxOrNull() ?: Long.MIN_VALUE
         return grants.count { it.grantedAtMillis in resetAt..nowMillis }
+    }
+
+    /**
+     * The heartbeat is written only while the lock has something to protect: inside a saved
+     * night window that has locked apps, or on a day whose saved snapshot has any limit.
+     * Outside those times nothing can be cheated, so a stale heartbeat proves nothing.
+     */
+    fun heartbeatMatters(nowMillis: Long, stored: List<RulesSnapshot>): Boolean = stored.any {
+        nowMillis >= it.startMillis && nowMillis < it.endMillis && when (it.kind) {
+            PeriodKind.NIGHT -> it.lockedApps.isNotEmpty()
+            PeriodKind.DAY -> it.limits.isNotEmpty()
+        }
+    }
+
+    /**
+     * When the lock was off AND the screen was on: the only time a disabled lock can be used to cheat.
+     *
+     * Gaps come from the saved service sessions (sorted by connect time):
+     * - Between two sessions: from the end of one to the start of the next. A clean stop ends at
+     *   [LockSession.disconnectedAtMillis]; a death without warning ends [HEARTBEAT_SLACK_MS] after
+     *   its last heartbeat. If the phone booted in between, the gap stops at that boot: the time
+     *   from boot until the service reconnects is the system starting up, not you.
+     * - After the last session, if the service isn't running now: from its end until [nowMillis].
+     *
+     * Only the parts of each gap where the screen was on count. A phone that was off, a dead
+     * battery, or a service killed while you slept (screen off) is never a cheat.
+     */
+    fun lockOffIntervals(
+        sessions: List<LockSession>,
+        screenOn: List<ScreenOnInterval>,
+        nowMillis: Long,
+        runningNow: Boolean
+    ): List<LockOffInterval> {
+        val sorted = sessions.sortedBy { it.connectedAtMillis }
+        val gaps = mutableListOf<LockOffInterval>()
+        sorted.forEachIndexed { i, session ->
+            val end = session.disconnectedAtMillis ?: (session.lastAliveMillis + HEARTBEAT_SLACK_MS)
+            val next = sorted.getOrNull(i + 1)
+            val gapEnd = when {
+                next == null -> if (runningNow) null else nowMillis
+                next.bootAtMillis > end -> next.bootAtMillis // the phone restarted: stop at boot
+                else -> next.connectedAtMillis
+            }
+            if (gapEnd != null && gapEnd > end) gaps += LockOffInterval(end, gapEnd)
+        }
+        // Keep only the screen-on parts of each gap.
+        return gaps.flatMap { gap ->
+            screenOn.mapNotNull { on ->
+                val start = maxOf(gap.startMillis, on.startMillis)
+                val end = min(gap.endMillis, on.endMillis)
+                if (end > start) LockOffInterval(start, end) else null
+            }
+        }.sortedBy { it.startMillis }
     }
 
     /**

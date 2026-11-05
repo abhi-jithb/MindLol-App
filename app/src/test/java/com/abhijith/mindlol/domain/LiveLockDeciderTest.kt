@@ -123,15 +123,121 @@ class LiveLockDeciderTest {
     }
 
     @Test
-    fun unlockCount_resetsWhenANewNightStarts() {
+    fun unlockCount_resetsAtBedtime() {
         val wedNight = NightCalendar.night(wed, settings, zone)
         val grants = listOf(
-            UnlockGrant(INSTA, LockReason.BEDTIME, at(thu, 1), 5),   // Wednesday night
-            UnlockGrant(INSTA, LockReason.BEDTIME, at(thu, 2), 5),   // Wednesday night
+            UnlockGrant(INSTA, LockReason.LIMIT, at(thu, 15), 5),     // Thursday daytime
             UnlockGrant(INSTA, LockReason.BEDTIME, at(fri, 0, 30), 5) // Thursday night
         )
-        assertEquals(2, LiveLockDecider.unlocksSinceReset(grants, at(thu, 3), listOf(wedNight, thuNight)))
         assertEquals(1, LiveLockDecider.unlocksSinceReset(grants, at(fri, 1), listOf(wedNight, thuNight)))
+    }
+
+    @Test
+    fun unlockCount_resetsAtWakeTime_soDayAndNightEscalateSeparately() {
+        val grants = listOf(
+            UnlockGrant(INSTA, LockReason.BEDTIME, at(fri, 1), 5),   // Thursday night
+            UnlockGrant(INSTA, LockReason.BEDTIME, at(fri, 2), 5),   // Thursday night
+            UnlockGrant(YT, LockReason.LIMIT, at(fri, 15), 5)        // Friday daytime, after waking at 08:00
+        )
+        assertEquals(2, LiveLockDecider.unlocksSinceReset(grants, at(fri, 7), listOf(thuNight)))
+        assertEquals(1, LiveLockDecider.unlocksSinceReset(grants, at(fri, 16), listOf(thuNight)))
+    }
+
+    @Test
+    fun unlockCount_beforeAnyBedtimeOrWake_countsEverything() {
+        val grants = listOf(UnlockGrant(INSTA, LockReason.LIMIT, at(thu, 10), 5))
+        assertEquals(1, LiveLockDecider.unlocksSinceReset(grants, at(thu, 12), emptyList()))
+    }
+
+    // ---------- Heartbeat: only while it matters ----------
+
+    @Test
+    fun heartbeatMatters_insideNightWithLocks_orOnDayWithLimits_only() {
+        val noLimitDay = NightCalendar.day(fri, Settings(), zone)
+        assertTrue(LiveLockDecider.heartbeatMatters(at(fri, 1), listOf(thuNight)))
+        assertTrue(LiveLockDecider.heartbeatMatters(at(thu, 15), listOf(thuDay)))                       // YouTube has a limit today
+        assertEquals(false, LiveLockDecider.heartbeatMatters(at(fri, 15), listOf(thuNight, noLimitDay))) // day without limits
+        assertEquals(false, LiveLockDecider.heartbeatMatters(at(fri, 1), listOf(NightCalendar.night(thu, Settings(), zone)))) // nothing locked
+    }
+
+    // ---------- Off intervals: screen-on parts of gaps only ----------
+
+    private val boot = at(wed, 9)
+    private fun lockSession(connected: Long, lastAlive: Long, disconnected: Long? = null, bootAt: Long = boot) =
+        LockSession(connected, lastAlive, disconnected, bootAt)
+
+    private fun cheatsFor(sessions: List<LockSession>, screenOn: List<ScreenOnInterval>, now: Long, running: Boolean) =
+        LiveLockDecider.lockDisabledCheats(thuNight, LiveLockDecider.lockOffIntervals(sessions, screenOn, now, running), now)
+
+    @Test
+    fun staleHeartbeatOutsideWhatMatters_isNotAGap_whileStillRunning() {
+        // Alive since Thursday morning; no limits all day, so the last heartbeat is 08:00. Still running at 23:30.
+        val sessions = listOf(lockSession(at(thu, 7), at(thu, 8)))
+        val screenOn = listOf(ScreenOnInterval(at(thu, 23), at(thu, 23, 30)))
+        assertTrue(LiveLockDecider.lockOffIntervals(sessions, screenOn, at(thu, 23, 30), runningNow = true).isEmpty())
+    }
+
+    @Test
+    fun phoneOffAllNight_noCheat() {
+        // Last heartbeat 23:20, the phone was switched off, booted at 07:30, service back at 07:31.
+        val sessions = listOf(
+            lockSession(at(thu, 7), at(thu, 23, 20)),
+            lockSession(at(fri, 7, 31), at(fri, 7, 31), bootAt = at(fri, 7, 30))
+        )
+        val screenOn = listOf(ScreenOnInterval(at(thu, 23), at(thu, 23, 15)), ScreenOnInterval(at(fri, 7, 30), at(fri, 9)))
+        assertTrue(cheatsFor(sessions, screenOn, at(fri, 12), running = true).isEmpty())
+    }
+
+    @Test
+    fun serviceKilledWhileScreenOff_noCheat() {
+        // Killed in the night while you slept (screen off 23:30 → 08:15, after the 08:00 wake time);
+        // back when the app opened at 08:30.
+        val sessions = listOf(
+            lockSession(at(thu, 7), at(fri, 2)),
+            lockSession(at(fri, 8, 30), at(fri, 8, 30))
+        )
+        val screenOn = listOf(ScreenOnInterval(at(thu, 23), at(thu, 23, 30)), ScreenOnInterval(at(fri, 8, 15), at(fri, 9)))
+        assertTrue(cheatsFor(sessions, screenOn, at(fri, 12), running = true).isEmpty())
+    }
+
+    @Test
+    fun serviceOffWhileScreenOn_isCheat() {
+        // Turned the lock off at 00:30 (clean disconnect), used the phone until 01:30, never turned it back on.
+        val sessions = listOf(lockSession(at(thu, 7), at(fri, 0, 30), disconnected = at(fri, 0, 30)))
+        val screenOn = listOf(ScreenOnInterval(at(fri, 0), at(fri, 1, 30)))
+        val cheat = cheatsFor(sessions, screenOn, at(fri, 12), running = false).single()
+        assertEquals(at(fri, 0, 30), cheat.startMillis)
+        assertEquals(60, cheat.minutes)
+    }
+
+    @Test
+    fun gapPartlyScreenOn_countsOnlyScreenOnMinutes() {
+        // Force-stopped: last heartbeat 01:00, so off from 01:10 until the service returned at 05:00.
+        // Screen on 01:20–01:50 and 03:00–03:15 inside the gap: 45 minutes, not 3h50.
+        val sessions = listOf(
+            lockSession(at(thu, 7), at(fri, 1)),
+            lockSession(at(fri, 5), at(fri, 5))
+        )
+        val screenOn = listOf(
+            ScreenOnInterval(at(fri, 0, 50), at(fri, 1, 5)),  // before the gap: lock still alive
+            ScreenOnInterval(at(fri, 1, 20), at(fri, 1, 50)),
+            ScreenOnInterval(at(fri, 3), at(fri, 3, 15))
+        )
+        val cheats = cheatsFor(sessions, screenOn, at(fri, 12), running = true)
+        assertEquals(2, cheats.size) // 1:50 → 3:00 is more than the 5-minute merge gap
+        assertEquals(45, cheats.sumOf { it.minutes })
+    }
+
+    @Test
+    fun rebootAfterTurningLockOff_countsOnlyUntilBoot() {
+        // Lock turned off cleanly at 01:00, screen on until 02:00, phone restarted at 03:00, service back 03:01.
+        val sessions = listOf(
+            lockSession(at(thu, 7), at(fri, 1), disconnected = at(fri, 1)),
+            lockSession(at(fri, 3, 1), at(fri, 3, 1), bootAt = at(fri, 3))
+        )
+        val screenOn = listOf(ScreenOnInterval(at(fri, 0, 40), at(fri, 2)), ScreenOnInterval(at(fri, 3), at(fri, 3, 20)))
+        val cheat = cheatsFor(sessions, screenOn, at(fri, 12), running = true).single()
+        assertEquals(60, cheat.minutes) // 01:00–02:00; 03:00–03:01 is boot, not a cheat
     }
 
     // ---------- LOCK_DISABLED ----------
