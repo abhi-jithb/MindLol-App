@@ -2,8 +2,6 @@ package com.abhijith.mindlol.ui.screens.home
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -25,17 +22,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.abhijith.mindlol.data.repository.FakeData
-import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.domain.StatsPeriod
+import com.abhijith.mindlol.ui.components.AppUsageRow
 import com.abhijith.mindlol.ui.components.Mascot
 import com.abhijith.mindlol.ui.components.formatCount
+import com.abhijith.mindlol.ui.components.SmallStat
 import com.abhijith.mindlol.ui.components.formatMinutes
 import com.abhijith.mindlol.ui.components.pickMood
 import com.abhijith.mindlol.ui.components.revealOnEnter
@@ -88,7 +82,7 @@ fun HomeScreen() {
         Spacer(Modifier.height(16.dp))
         val most = today.topApps.maxOf { it.minutes }
         today.topApps.forEachIndexed { i, app ->
-            AppRow(app = app, fraction = app.minutes.toFloat() / most, modifier = Modifier.revealOnEnter(3 + i))
+            AppUsageRow(app = app, fraction = app.minutes.toFloat() / most, modifier = Modifier.revealOnEnter(3 + i))
             Spacer(Modifier.height(20.dp))
         }
         Spacer(Modifier.height(24.dp))
@@ -113,45 +107,6 @@ private fun CountUpMinutes(totalMinutes: Int) {
         style = MaterialTheme.typography.displayLarge.copy(fontFeatureSettings = "tnum"),
         color = MaterialTheme.colorScheme.onBackground
     )
-}
-
-@Composable
-private fun SmallStat(value: String, label: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-/** App name and time, with a thin bar underneath that grows to its share of the top app. */
-@Composable
-private fun AppRow(app: AppUsage, fraction: Float, modifier: Modifier = Modifier) {
-    val grow = remember { Animatable(0f) }
-    LaunchedEffect(fraction) { grow.animateTo(fraction, Motion.standard(Motion.EXTRA_LONG, delayMillis = Motion.MEDIUM)) }
-    val track = MaterialTheme.colorScheme.surfaceContainerHigh
-    val fill = MaterialTheme.colorScheme.onBackground
-
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(app.appName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
-            Text(
-                formatMinutes(app.minutes),
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .drawBehind {
-                    val radius = CornerRadius(size.height / 2)
-                    drawRoundRect(track, cornerRadius = radius)
-                    drawRoundRect(fill, size = Size(size.width * grow.value, size.height), cornerRadius = radius)
-                }
-        )
-    }
 }
 
 @Preview(heightDp = 800)

@@ -50,7 +50,11 @@ object FakeData {
             "12p", "1p", "2p", "3p", "4p", "5p", "6p", "7p", "8p", "9p", "10p", "11p"
         ),
         minutes = hourlyToday,
-        apps = breakdown(hourlyToday.sum())
+        apps = breakdown(hourlyToday.sum()),
+        fullLabels = (0..23).map { h ->
+            val hour12 = if (h % 12 == 0) 12 else h % 12
+            "$hour12 ${if (h < 12) "AM" else "PM"}"
+        }
     )
 
     // Last 7 days, ending today (Thursday).
@@ -72,7 +76,8 @@ object FakeData {
         period = StatsPeriod.MONTH,
         labels = (7..31).map { "$it" } + (1..5).map { "$it" },
         minutes = monthMinutes,
-        apps = breakdown(monthMinutes.sum())
+        apps = breakdown(monthMinutes.sum()),
+        fullLabels = (7..31).map { "$it Oct" } + (1..5).map { "$it Nov" }
     )
 
     // Last 12 months, total minutes per month. November is only 5 days in.
@@ -83,7 +88,8 @@ object FakeData {
         period = StatsPeriod.YEAR,
         labels = listOf("D", "J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N"),
         minutes = yearMinutes,
-        apps = breakdown(yearMinutes.sum())
+        apps = breakdown(yearMinutes.sum()),
+        fullLabels = listOf("Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov")
     )
 
     fun series(period: StatsPeriod): UsageSeries = when (period) {

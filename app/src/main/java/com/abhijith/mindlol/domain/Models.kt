@@ -30,7 +30,9 @@ data class UsageSeries(
     val period: StatsPeriod,
     val labels: List<String>,
     val minutes: List<Int>,
-    val apps: List<AppUsage>
+    val apps: List<AppUsage>,
+    /** Longer names for the same buckets ("Jul" instead of "J"), for text outside the chart. */
+    val fullLabels: List<String> = labels
 ) {
     val totalMinutes: Int get() = minutes.sum()
 
