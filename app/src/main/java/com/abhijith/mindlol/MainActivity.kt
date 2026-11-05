@@ -9,7 +9,7 @@ import androidx.activity.compose.setContent
 import android.os.Build
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 
-import com.abhijith.mindlol.ui.screens.home.HomeScreen
+import com.abhijith.mindlol.ui.navigation.MindLolApp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent{
             MindLolTheme {
-                HomeScreen()
+                MindLolApp()
             }
         }
     }
