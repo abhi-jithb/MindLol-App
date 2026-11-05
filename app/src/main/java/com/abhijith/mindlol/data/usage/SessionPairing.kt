@@ -1,5 +1,6 @@
 package com.abhijith.mindlol.data.usage
 
+import com.abhijith.mindlol.domain.AppSession
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -90,6 +91,17 @@ object SessionPairing {
         return days.map { date ->
             DayUsage(date, perApp.getValue(date), totals.getValue(date), unlocks[date] ?: 0)
         }
+    }
+
+    /**
+     * Every foreground session with its exact start and end, clipped to [rangeStartMs, rangeEndMs).
+     * The rules engine judges cheats from these. A session still open at [rangeEndMs] ends there.
+     */
+    fun sessions(events: List<UsageEventRecord>, rangeStartMs: Long, rangeEndMs: Long): List<AppSession> {
+        if (rangeEndMs <= rangeStartMs) return emptyList()
+        return pairSessions(events, rangeStartMs, rangeEndMs).first
+            .map { AppSession(it.packageName, it.start, it.end) }
+            .sortedBy { it.startMillis }
     }
 
     /** Pairs RESUMED/PAUSED into sessions, clipped to [rangeStartMs, rangeEndMs). Also returns unlock times. */

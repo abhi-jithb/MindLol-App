@@ -1,5 +1,6 @@
 package com.abhijith.mindlol.data.usage
 
+import com.abhijith.mindlol.domain.AppSession
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
@@ -182,5 +183,22 @@ class SessionPairingTest {
         val hours = SessionPairing.hourlyTotals(events, dayStart, dayEnd, ist, setOf("launcher"))
         assertEquals(min(30), hours[14])
         assertEquals(0L, hours[15])
+    }
+
+    @Test
+    fun sessions_returnsPairedIntervalsWithExactTimes() {
+        val events = listOf(
+            ev("insta", 0, 30, EventKind.RESUMED),
+            ev("insta", 0, 50, EventKind.PAUSED),
+            ev("yt", 1, 0, EventKind.RESUMED) // still open at the end of the range
+        )
+        val result = SessionPairing.sessions(events, dayStart, ms(day, 2, 0))
+        assertEquals(
+            listOf(
+                AppSession("insta", ms(day, 0, 30), ms(day, 0, 50)),
+                AppSession("yt", ms(day, 1, 0), ms(day, 2, 0))
+            ),
+            result
+        )
     }
 }
