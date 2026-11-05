@@ -83,7 +83,12 @@ fun MindLolApp() {
         NavHost(
             navController = navController,
             startDestination = SPLASH_ROUTE,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            // Same animation forwards and back; direction comes from tab order (see Transitions.kt).
+            enterTransition = { screenEnter() },
+            exitTransition = { screenExit() },
+            popEnterTransition = { screenEnter() },
+            popExitTransition = { screenExit() }
         ) {
             composable(SPLASH_ROUTE) {
                 SplashScreen(
