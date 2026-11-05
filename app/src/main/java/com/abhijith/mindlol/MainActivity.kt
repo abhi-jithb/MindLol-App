@@ -7,6 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import android.os.Build
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.abhijith.mindlol.data.usage.UsagePermission
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 
 import com.abhijith.mindlol.ui.navigation.MindLolApp
@@ -23,7 +26,13 @@ class MainActivity : ComponentActivity() {
         }
         setContent{
             MindLolTheme {
-                MindLolApp()
+                val container = (application as MindLolApplication).container
+                // collectAsState turns the StateFlow into Compose state: when it changes, the UI redraws.
+                val granted by container.usagePermission.granted.collectAsState()
+                MindLolApp(
+                    usageAccessGranted = granted,
+                    onOpenUsageSettings = { UsagePermission.openSettings(this) }
+                )
             }
         }
     }

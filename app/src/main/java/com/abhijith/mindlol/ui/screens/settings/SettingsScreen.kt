@@ -57,9 +57,12 @@ private const val LIMIT_STEP = 15
 // Which time the open picker is editing. Null means no picker is open.
 private enum class EditingTime { WAKE, BED }
 
-/** UI only for now: every change lives in memory and resets when the app closes. */
+/**
+ * Mostly UI only for now: changes live in memory and reset when the app closes.
+ * The usage access row is real and opens system Settings when tapped.
+ */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(usageAccessGranted: Boolean, onOpenUsageSettings: () -> Unit) {
     val initial = FakeData.settings
     var wake by rememberSaveable { mutableStateOf(initial.wakeTime) }
     var bed by rememberSaveable { mutableStateOf(initial.bedTime) }
@@ -92,6 +95,14 @@ fun SettingsScreen() {
         }
 
         SectionLabel("PERMISSIONS", Modifier.revealOnEnter(8))
+        PermissionRow(
+            permission = PermissionInfo(
+                name = "Usage access",
+                reason = "To count screen time per app",
+                status = if (usageAccessGranted) "Allowed" else "Not granted"
+            ),
+            onClick = onOpenUsageSettings
+        )
         initial.permissions.forEach { PermissionRow(it) }
 
         SectionLabel("THEME", Modifier.revealOnEnter(9))
@@ -220,10 +231,13 @@ private fun AppRuleRow(rule: AppRule, onChange: (AppRule) -> Unit, modifier: Mod
 }
 
 @Composable
-private fun PermissionRow(permission: PermissionInfo) {
+private fun PermissionRow(permission: PermissionInfo, onClick: (() -> Unit)? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 12.dp)
     ) {
         Column(Modifier.weight(1f)) {
             Text(permission.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
@@ -264,5 +278,5 @@ private fun TimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfir
 @Preview(heightDp = 1400)
 @Composable
 private fun SettingsScreenPreview() {
-    MindLolTheme { SettingsScreen() }
+    MindLolTheme { SettingsScreen(usageAccessGranted = false, onOpenUsageSettings = {}) }
 }

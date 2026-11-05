@@ -161,7 +161,6 @@ object FakeData {
             AppRule("WhatsApp", dailyLimitMinutes = null, lockedAtBedtime = false)
         ),
         permissions = listOf(
-            PermissionInfo("Usage access", "To count screen time per app", "Not granted"),
             PermissionInfo("Notifications", "To roast you when you cheat", "Not granted"),
             PermissionInfo("Display over other apps", "To show the lock screen", "Not needed yet")
         ),

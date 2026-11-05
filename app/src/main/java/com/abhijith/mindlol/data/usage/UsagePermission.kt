@@ -2,10 +2,13 @@ package com.abhijith.mindlol.data.usage
 
 import android.Manifest
 import android.app.AppOpsManager
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Process
+import android.provider.Settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +47,20 @@ class UsagePermission(private val context: Context) {
                 context.checkCallingOrSelfPermission(Manifest.permission.PACKAGE_USAGE_STATS) ==
                     PackageManager.PERMISSION_GRANTED
             else -> false
+        }
+    }
+
+    companion object {
+        /**
+         * Opens the system "Usage access" list. Some phones hide that page,
+         * so fall back to the main Settings screen instead of crashing.
+         */
+        fun openSettings(context: Context) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            } catch (e: ActivityNotFoundException) {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS))
+            }
         }
     }
 }
