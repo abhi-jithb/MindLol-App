@@ -60,5 +60,6 @@ class SleepTimeTest {
         assertEquals(8 * 60, s.wakeMinutes)
         assertEquals(RoastIntensity.SAVAGE, s.roastIntensity)
         assertEquals(emptySet<String>(), s.lockedApps)
+        assertEquals(AppTheme.PURE_BLACK, s.theme)
     }
 }

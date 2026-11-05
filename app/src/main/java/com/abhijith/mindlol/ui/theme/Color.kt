@@ -12,3 +12,9 @@ val DarkGray = Color(0xFF1C1C1C)
 val Charcoal = Color(0xFF111111)
 val MidGray = Color(0xFF2E2E2E)
 val LightGray = Color(0xFFCFCFCF)
+
+// "Soft black" theme: a dark gray page instead of pure black, easier on the eyes in a lit room.
+val SoftBlack = Color(0xFF121212)
+val SoftSurface = Color(0xFF1E1E1E)
+val SoftSurfaceHigh = Color(0xFF2A2A2A)
+val SoftOutline = Color(0xFF3A3A3A)

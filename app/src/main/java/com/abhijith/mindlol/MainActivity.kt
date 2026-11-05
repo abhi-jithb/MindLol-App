@@ -14,6 +14,7 @@ import android.os.Build
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.abhijith.mindlol.data.usage.UsagePermission
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -31,8 +32,10 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent{
-            MindLolTheme {
-                val container = (application as MindLolApplication).container
+            val container = (application as MindLolApplication).container
+            // The chosen theme, live: changing it in Settings restyles the app at once.
+            val settings by container.settingsRepository.settings.collectAsState(initial = null)
+            MindLolTheme(theme = settings?.theme ?: AppTheme.PURE_BLACK) {
                 // collectAsState turns the StateFlow into Compose state: when it changes, the UI redraws.
                 val granted by container.usagePermission.granted.collectAsState()
                 MindLolApp(

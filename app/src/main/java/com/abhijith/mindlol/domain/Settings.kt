@@ -11,6 +11,9 @@ import java.time.ZonedDateTime
 /** How hard the roasts hit. PERSONAL unlocks the more personal lines and question cards. */
 enum class RoastIntensity { MILD, SAVAGE, PERSONAL }
 
+/** The app's look. All three stay black, white and gray. */
+enum class AppTheme { PURE_BLACK, SOFT_BLACK, HIGH_CONTRAST }
+
 /**
  * A one-night sleep window that replaces the normal one, for nights you know will run late.
  * It stops applying at [expiresAtMillis], which is the wake time that ends that night.
@@ -30,7 +33,8 @@ data class Settings(
     val lockedApps: Set<String> = emptySet(),
     /** Daily limit in minutes, by package name. Apps with no limit are simply absent. */
     val appLimits: Map<String, Int> = emptyMap(),
-    val roastIntensity: RoastIntensity = RoastIntensity.SAVAGE
+    val roastIntensity: RoastIntensity = RoastIntensity.SAVAGE,
+    val theme: AppTheme = AppTheme.PURE_BLACK
 ) {
     /** The override, but only while it still applies. */
     fun activeOverride(nowMillis: Long): TonightOverride? =

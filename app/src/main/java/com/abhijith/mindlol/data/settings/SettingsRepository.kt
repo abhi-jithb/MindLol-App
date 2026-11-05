@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.RoastIntensity
 import com.abhijith.mindlol.domain.Settings
 import com.abhijith.mindlol.domain.TonightOverride
@@ -60,6 +61,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setRoastIntensity(intensity: RoastIntensity) = edit { it[ROAST_INTENSITY] = intensity.name }
 
+    suspend fun setTheme(theme: AppTheme) = edit { it[THEME] = theme.name }
+
     // edit {} runs the block as one atomic read-modify-write, then saves to disk.
     private suspend fun edit(block: (MutablePreferences) -> Unit) {
         dataStore.edit { block(it) }
@@ -77,7 +80,8 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             } else null,
             lockedApps = this[LOCKED_APPS].orEmpty(),
             appLimits = SettingsCodec.decodeLimits(this[APP_LIMITS].orEmpty()),
-            roastIntensity = SettingsCodec.decodeIntensity(this[ROAST_INTENSITY])
+            roastIntensity = SettingsCodec.decodeIntensity(this[ROAST_INTENSITY]),
+            theme = SettingsCodec.decodeTheme(this[THEME])
         )
     }
 
@@ -90,5 +94,6 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val LOCKED_APPS = stringSetPreferencesKey("locked_apps")
         val APP_LIMITS = stringSetPreferencesKey("app_limits")
         val ROAST_INTENSITY = stringPreferencesKey("roast_intensity")
+        val THEME = stringPreferencesKey("theme")
     }
 }

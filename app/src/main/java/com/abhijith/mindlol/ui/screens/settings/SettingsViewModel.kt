@@ -10,6 +10,7 @@ import com.abhijith.mindlol.data.repository.CheatRepository
 import com.abhijith.mindlol.data.settings.SettingsRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.domain.AppRule
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.InstalledApp
 import com.abhijith.mindlol.domain.RoastIntensity
 import com.abhijith.mindlol.domain.Settings
@@ -120,6 +121,9 @@ class SettingsViewModel(
     }
 
     fun setRoastIntensity(intensity: RoastIntensity) = save { repository.setRoastIntensity(intensity) }
+
+    /** Takes effect at once: MainActivity follows the same settings Flow. */
+    fun setTheme(theme: AppTheme) = save { repository.setTheme(theme) }
 
     // The expiry is worked out from "now", so changing the wake time moves it too.
     private fun newOverride(bedtimeMinutes: Int, wakeMinutes: Int) = TonightOverride(

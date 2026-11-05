@@ -1,13 +1,11 @@
 package com.abhijith.mindlol.data.repository
 
-import com.abhijith.mindlol.domain.PermissionInfo
-import com.abhijith.mindlol.domain.SettingsValues
 import com.abhijith.mindlol.domain.Streak
 import com.abhijith.mindlol.domain.TotalStat
 
 /**
- * The values that are still fake: reels, the reels streak, screen-time totals, life-cost lines and
- * settings. Usage numbers moved to UsageRepository in Phase 2; the rest becomes real in Phases 3–4.
+ * The values that are still fake: reels, the reels streak, screen-time totals and life-cost lines.
+ * Usage numbers moved to UsageRepository in Phase 2; the rest becomes real in Phase 4.
  */
 object FakeData {
 
@@ -34,16 +32,5 @@ object FakeData {
         "412 reels ≈ one movie you didn't watch",
         "4,120 reels ≈ 23 hours of strangers' lives",
         "81 hours ≈ 10 working days, given to glass"
-    )
-
-    // ---------- Settings ----------
-
-    val settings = SettingsValues(
-        permissions = listOf(
-            PermissionInfo("Notifications", "To roast you when you cheat", "Not granted"),
-            PermissionInfo("Display over other apps", "To show the lock screen", "Not needed yet")
-        ),
-        themeOptions = listOf("Pure black", "Soft black", "High contrast"),
-        selectedTheme = 0
     )
 }

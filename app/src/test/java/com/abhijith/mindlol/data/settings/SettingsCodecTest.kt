@@ -1,5 +1,6 @@
 package com.abhijith.mindlol.data.settings
 
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.RoastIntensity
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -39,5 +40,13 @@ class SettingsCodecTest {
     fun intensity_missingOrUnknown_defaultsToSavage() {
         assertEquals(RoastIntensity.SAVAGE, SettingsCodec.decodeIntensity(null))
         assertEquals(RoastIntensity.SAVAGE, SettingsCodec.decodeIntensity("NUCLEAR"))
+    }
+
+    @Test
+    fun theme_knownName_isRead_unknownOrMissing_isPureBlack() {
+        assertEquals(AppTheme.SOFT_BLACK, SettingsCodec.decodeTheme("SOFT_BLACK"))
+        assertEquals(AppTheme.HIGH_CONTRAST, SettingsCodec.decodeTheme("HIGH_CONTRAST"))
+        assertEquals(AppTheme.PURE_BLACK, SettingsCodec.decodeTheme(null))
+        assertEquals(AppTheme.PURE_BLACK, SettingsCodec.decodeTheme("NEON"))
     }
 }

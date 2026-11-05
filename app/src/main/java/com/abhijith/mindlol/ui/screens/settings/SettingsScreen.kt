@@ -18,6 +18,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.key
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.InstalledApp
 import com.abhijith.mindlol.domain.RoastIntensity
 import com.abhijith.mindlol.domain.Settings
@@ -70,7 +71,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.abhijith.mindlol.data.repository.FakeData
 import com.abhijith.mindlol.domain.AppRule
 import com.abhijith.mindlol.domain.PermissionInfo
 import com.abhijith.mindlol.ui.components.formatMinutes
@@ -89,7 +89,7 @@ private enum class EditingTime { WAKE, BED, TONIGHT_WAKE, TONIGHT_BED }
 
 /**
  * Sleep window, tonight's override, locked apps, limits and roast intensity are real and saved
- * with DataStore (through [SettingsViewModel]). Theme is still preview only.
+ * with DataStore (through [SettingsViewModel]), and so is the theme.
  */
 @Composable
 fun SettingsScreen(
@@ -113,7 +113,8 @@ fun SettingsScreen(
             addApp = viewModel::addApp,
             setLocked = viewModel::setLocked,
             setLimit = viewModel::setLimit,
-            setRoastIntensity = viewModel::setRoastIntensity
+            setRoastIntensity = viewModel::setRoastIntensity,
+            setTheme = viewModel::setTheme
         ),
         usageAccessGranted = usageAccessGranted,
         onOpenUsageSettings = onOpenUsageSettings,
@@ -131,7 +132,8 @@ data class SettingsActions(
     val addApp: (String) -> Unit = {},
     val setLocked: (String, Boolean) -> Unit = { _, _ -> },
     val setLimit: (String, Int) -> Unit = { _, _ -> },
-    val setRoastIntensity: (RoastIntensity) -> Unit = {}
+    val setRoastIntensity: (RoastIntensity) -> Unit = {},
+    val setTheme: (AppTheme) -> Unit = {}
 )
 
 @Composable
@@ -151,8 +153,6 @@ fun SettingsContent(
 
     var editing by rememberSaveable { mutableStateOf<EditingTime?>(null) }
     var pickingApp by rememberSaveable { mutableStateOf(false) }
-    val fake = FakeData.settings
-    var theme by rememberSaveable { mutableStateOf(fake.selectedTheme) }
 
     // A snackbar is a short message that slides up from the bottom and goes away by itself.
     val snackbar = remember { SnackbarHostState() }
@@ -230,30 +230,30 @@ fun SettingsContent(
                 ),
                 onClick = onOpenUsageSettings
             )
-            fake.permissions.forEach { PermissionRow(it) }
 
             SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
             BackgroundLimitsSection(onOpenAppSettings)
 
             SectionLabel("THEME", Modifier.revealOnEnter(10))
-            fake.themeOptions.forEachIndexed { i, name ->
+            AppTheme.entries.forEach { option ->
+                val selected = settings.theme == option
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .selectable(selected = theme == i, role = Role.RadioButton) { theme = i }
+                        .selectable(selected = selected, role = Role.RadioButton) { actions.setTheme(option) }
                         .padding(vertical = 4.dp)
                 ) {
                     // onClick = null: the whole row handles the tap, so the touch target is bigger.
-                    RadioButton(selected = theme == i, onClick = null)
+                    RadioButton(selected = selected, onClick = null)
                     Spacer(Modifier.width(12.dp))
-                    Text(name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    Text(themeLabel(option), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
                 }
             }
 
             Spacer(Modifier.height(40.dp))
             Text(
-                text = "Theme is preview only. Everything else is saved.",
+                text = "Everything here is saved on this phone.",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -348,6 +348,12 @@ private fun TonightSection(
             }
         }
     }
+}
+
+private fun themeLabel(theme: AppTheme) = when (theme) {
+    AppTheme.PURE_BLACK -> "Pure black"
+    AppTheme.SOFT_BLACK -> "Soft black"
+    AppTheme.HIGH_CONTRAST -> "High contrast"
 }
 
 /** Three equal boxes; the chosen one turns white with black text. */

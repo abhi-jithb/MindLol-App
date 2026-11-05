@@ -1,5 +1,6 @@
 package com.abhijith.mindlol.data.settings
 
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.RoastIntensity
 
 /**
@@ -26,6 +27,10 @@ object SettingsCodec {
     /** Unknown names (e.g. from a future version) fall back to the default. */
     fun decodeIntensity(stored: String?): RoastIntensity =
         RoastIntensity.entries.firstOrNull { it.name == stored } ?: RoastIntensity.SAVAGE
+
+    /** Unknown names fall back to the default look. */
+    fun decodeTheme(stored: String?): AppTheme =
+        AppTheme.entries.firstOrNull { it.name == stored } ?: AppTheme.PURE_BLACK
 
     /** A set of names as one text column: "a,b,c". Package names never contain commas. */
     fun joinList(items: Collection<String>): String = items.sorted().joinToString(",")

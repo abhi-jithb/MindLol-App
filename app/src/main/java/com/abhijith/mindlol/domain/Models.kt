@@ -73,10 +73,3 @@ data class PermissionInfo(
     val reason: String,
     val status: String
 )
-
-/** The parts of Settings that are still fake. The real rules live in [Settings]. */
-data class SettingsValues(
-    val permissions: List<PermissionInfo>,
-    val themeOptions: List<String>,
-    val selectedTheme: Int
-)
