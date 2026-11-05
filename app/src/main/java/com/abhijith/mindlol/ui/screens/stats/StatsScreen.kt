@@ -85,6 +85,16 @@ fun StatsContent(selected: StatsPeriod, state: StatsUiState, onSelect: (StatsPer
         Spacer(Modifier.height(32.dp))
         UsageBarChart(series)
 
+        if (series.totalMinutes == 0) {
+            Spacer(Modifier.height(32.dp))
+            Text(
+                text = "No screen time recorded for this period.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
         Spacer(Modifier.height(32.dp))
         Row(Modifier.fillMaxWidth().revealOnEnter(1)) {
             SmallStat(
