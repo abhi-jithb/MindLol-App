@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import com.abhijith.mindlol.domain.LockOutcome
 import java.time.LocalDate
 
 /** Lock screen attempts and service sessions (database v3). Nothing here is ever deleted. */
@@ -18,6 +19,13 @@ interface LockDao {
 
     @Update
     suspend fun updateEvent(event: LockEventEntity)
+
+    /** Moves the furthest step forward, never back. */
+    @Query("UPDATE lock_event SET stepReached = MAX(stepReached, :step) WHERE id = :id")
+    suspend fun reachStep(id: Long, step: Int)
+
+    @Query("UPDATE lock_event SET outcome = :outcome WHERE id = :id")
+    suspend fun setOutcome(id: Long, outcome: LockOutcome)
 
     @Query("SELECT * FROM lock_event WHERE periodDate >= :from ORDER BY shownAtMillis")
     suspend fun eventsFrom(from: LocalDate): List<LockEventEntity>

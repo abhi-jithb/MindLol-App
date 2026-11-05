@@ -39,6 +39,16 @@
             </intent-filter>
         </activity>
 
+        <!-- The lock screen, opened by the live lock service over a locked app. Its own task
+             (singleTask + own affinity), never in recents, never exported. -->
+        <activity
+            android:name=".ui.lock.LockActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.abhijith.mindlol.lock"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- The live lock (Phase 3b). Only the system can bind it (BIND_ACCESSIBILITY_SERVICE);
              you switch it on yourself in Settings → Accessibility. -->
         <service

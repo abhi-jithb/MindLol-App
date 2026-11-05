@@ -67,7 +67,7 @@ class AppContainer(context: Context) {
     }
 
     val liveLockRepository: LiveLockRepository by lazy {
-        LiveLockRepository(database.rulesDao(), database.lockDao(), usageReader, SystemApps(appContext))
+        LiveLockRepository(database.rulesDao(), database.lockDao(), usageReader, SystemApps(appContext), appNames, settingsRepository)
     }
 
     val usageRepository: UsageRepository by lazy {

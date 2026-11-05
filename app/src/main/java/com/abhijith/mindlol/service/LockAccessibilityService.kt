@@ -9,6 +9,7 @@ import com.abhijith.mindlol.MindLolApplication
 import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.domain.LiveLockDecider
 import com.abhijith.mindlol.domain.LockDecision
+import com.abhijith.mindlol.ui.lock.LockActivity
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,8 +28,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * The live lock (Phase 3b). The system starts it once you switch it on in Settings → Accessibility,
  * and tells it every time a new window comes to the front.
  *
- * ITEM 5 = LOGGING ONLY: it decides, and writes the decision to logcat (Log.w, because Vivo drops
- * Log.i), but it never covers an app yet. The lock screen arrives in item 6.
+ * When the decision is "lock", it opens LockActivity over the app. Every decision is also written
+ * to logcat (Log.w, because Vivo drops Log.i).
  *
  * It also records when it was running (lock_session), which is how a disabled lock is noticed.
  */
@@ -42,6 +43,8 @@ class LockAccessibilityService : AccessibilityService() {
     private var sessionId: Long? = null
     private var heartbeatJob: Job? = null
     private var lastPackage: String? = null
+    // Apps and the home screen; null until worked out (it lists installed apps, so it runs off the main thread).
+    private var tracked: Set<String>? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -56,6 +59,7 @@ class LockAccessibilityService : AccessibilityService() {
             Log.w(TAG, "Live lock connected: session $id, phone booted at $bootAt")
             heartbeatJob = launch { heartbeatLoop(id) }
         }
+        scope.launch(Dispatchers.IO) { tracked = repository.trackedPackages() }
     }
 
     /** Every 5 minutes: write the heartbeat if a night with locks or a day with limits is running. */
@@ -69,11 +73,18 @@ class LockAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == lastPackage || pkg in repository.notApps) return // same app, or keyboard / status bar
+        // Only apps and the home screen count; overlays (keyboard, status bar, Vivo gestures) are ignored.
+        val known = tracked
+        if (known != null && pkg !in known) return
+        if (pkg == lastPackage) return // the same app, still in front
         lastPackage = pkg
         scope.launch {
             when (val decision = repository.decide(pkg)) {
-                is LockDecision.Lock -> Log.w(TAG, "WOULD LOCK $pkg (${decision.reason}, period ${decision.periodDate})")
+                is LockDecision.Lock -> {
+                    Log.w(TAG, "LOCK $pkg (${decision.reason}, period ${decision.periodDate})")
+                    // Allowed from the background because the system has bound this accessibility service.
+                    startActivity(LockActivity.intent(this@LockAccessibilityService, pkg, decision.reason, decision.periodDate))
+                }
                 is LockDecision.Allow -> Log.w(TAG, "allow $pkg, recheck at ${decision.recheckAtMillis}")
             }
         }
