@@ -22,7 +22,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.abhijith.mindlol.data.repository.FakeData
 import com.abhijith.mindlol.domain.StatsPeriod
 import com.abhijith.mindlol.domain.UsageSeries
 import com.abhijith.mindlol.ui.theme.MindLolTheme
@@ -113,5 +112,11 @@ fun UsageBarChart(series: UsageSeries, modifier: Modifier = Modifier) {
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun UsageBarChartPreview() {
-    MindLolTheme { UsageBarChart(FakeData.series(StatsPeriod.WEEK)) }
+    val sample = UsageSeries(
+        period = StatsPeriod.WEEK,
+        labels = listOf("Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"),
+        minutes = listOf(196, 241, 227, 158, 172, 149, 134),
+        apps = emptyList()
+    )
+    MindLolTheme { UsageBarChart(sample) }
 }

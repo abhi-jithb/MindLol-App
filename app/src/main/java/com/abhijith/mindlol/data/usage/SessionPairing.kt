@@ -3,6 +3,7 @@ package com.abhijith.mindlol.data.usage
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /** The few event kinds the pairing logic cares about. Mapped from Android's UsageEvents. */
 enum class EventKind {
@@ -65,7 +66,38 @@ object SessionPairing {
         excludedFromTotal: Set<String> = emptySet()
     ): List<DayUsage> {
         if (rangeEndMs <= rangeStartMs) return emptyList()
+        val (clipped, unlockTimes) = pairSessions(events, rangeStartMs, rangeEndMs)
 
+        val days = daysBetween(rangeStartMs, rangeEndMs, zone)
+        val perApp = days.associateWith { mutableMapOf<String, Long>() }
+        for (s in clipped) {
+            for ((date, ms) in splitByDay(s.start, s.end, zone)) {
+                val map = perApp.getValue(date)
+                map[s.packageName] = (map[s.packageName] ?: 0L) + ms
+            }
+        }
+
+        val totals = days.associateWith { 0L }.toMutableMap()
+        for ((start, end) in union(clipped.filter { it.packageName !in excludedFromTotal })) {
+            for ((date, ms) in splitByDay(start, end, zone)) totals[date] = totals.getValue(date) + ms
+        }
+
+        val unlocks = unlockTimes
+            .filter { it in rangeStartMs until rangeEndMs }
+            .groupingBy { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+            .eachCount()
+
+        return days.map { date ->
+            DayUsage(date, perApp.getValue(date), totals.getValue(date), unlocks[date] ?: 0)
+        }
+    }
+
+    /** Pairs RESUMED/PAUSED into sessions, clipped to [rangeStartMs, rangeEndMs). Also returns unlock times. */
+    private fun pairSessions(
+        events: List<UsageEventRecord>,
+        rangeStartMs: Long,
+        rangeEndMs: Long
+    ): Pair<List<Interval>, List<Long>> {
         val sessions = mutableListOf<Interval>()
         val unlockTimes = mutableListOf<Long>()
         val open = mutableMapOf<String, OpenApp>()
@@ -108,29 +140,36 @@ object SessionPairing {
             val end = minOf(s.end, rangeEndMs)
             if (end > start) s.copy(start = start, end = end) else null
         }
+        return clipped to unlockTimes
+    }
 
-        val days = daysBetween(rangeStartMs, rangeEndMs, zone)
-        val perApp = days.associateWith { mutableMapOf<String, Long>() }
-        for (s in clipped) {
-            for ((date, ms) in splitByDay(s.start, s.end, zone)) {
-                val map = perApp.getValue(date)
-                map[s.packageName] = (map[s.packageName] ?: 0L) + ms
+    /**
+     * Screen time per local hour (24 values, index = hour of day) for the day that starts at
+     * [dayStartMs], stopping at [rangeEndMs] (usually "now"). Overlaps count once; excluded apps don't count.
+     */
+    fun hourlyTotals(
+        events: List<UsageEventRecord>,
+        dayStartMs: Long,
+        rangeEndMs: Long,
+        zone: ZoneId,
+        excludedFromTotal: Set<String> = emptySet()
+    ): List<Long> {
+        val hours = LongArray(24)
+        val dayDate = Instant.ofEpochMilli(dayStartMs).atZone(zone).toLocalDate()
+        val dayEnd = minOf(rangeEndMs, dayDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+        if (dayEnd <= dayStartMs) return hours.toList()
+        val (clipped, _) = pairSessions(events, dayStartMs, dayEnd)
+        for ((start, end) in union(clipped.filter { it.packageName !in excludedFromTotal })) {
+            var cursor = start
+            while (cursor < end) {
+                val time = Instant.ofEpochMilli(cursor).atZone(zone)
+                val nextHour = time.truncatedTo(ChronoUnit.HOURS).plusHours(1).toInstant().toEpochMilli()
+                val segmentEnd = minOf(end, nextHour)
+                hours[time.hour] += segmentEnd - cursor
+                cursor = segmentEnd
             }
         }
-
-        val totals = days.associateWith { 0L }.toMutableMap()
-        for ((start, end) in union(clipped.filter { it.packageName !in excludedFromTotal })) {
-            for ((date, ms) in splitByDay(start, end, zone)) totals[date] = totals.getValue(date) + ms
-        }
-
-        val unlocks = unlockTimes
-            .filter { it in rangeStartMs until rangeEndMs }
-            .groupingBy { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
-            .eachCount()
-
-        return days.map { date ->
-            DayUsage(date, perApp.getValue(date), totals.getValue(date), unlocks[date] ?: 0)
-        }
+        return hours.toList()
     }
 
     /** Merges overlapping intervals, so two apps on screen together count once. */

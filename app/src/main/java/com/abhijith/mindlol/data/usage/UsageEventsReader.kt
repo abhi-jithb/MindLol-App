@@ -61,6 +61,18 @@ class UsageEventsReader(private val context: Context) {
         }
     }
 
+    /** Screen time per hour for [day] (24 values), up to [nowMs]. Computed live from events. */
+    fun readHours(
+        day: LocalDate,
+        zone: ZoneId = ZoneId.systemDefault(),
+        nowMs: Long = System.currentTimeMillis()
+    ): List<Long> {
+        val dayStart = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayEnd = minOf(nowMs, day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli())
+        val events = readEvents(dayStart - LEAD_IN_MS, dayEnd)
+        return SessionPairing.hourlyTotals(events, dayStart, dayEnd, zone, excludedPackages)
+    }
+
     private fun readEvents(startMs: Long, endMs: Long): List<UsageEventRecord> {
         val result = mutableListOf<UsageEventRecord>()
         val events = usageStats?.queryEvents(startMs, endMs) ?: return result

@@ -16,16 +16,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.abhijith.mindlol.data.repository.FakeData
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.domain.StatsPeriod
+import com.abhijith.mindlol.domain.UsageSeries
 import com.abhijith.mindlol.ui.components.AppUsageRow
 import com.abhijith.mindlol.ui.components.PeriodSelector
 import com.abhijith.mindlol.ui.components.UsageBarChart
@@ -35,11 +35,19 @@ import com.abhijith.mindlol.ui.components.revealOnEnter
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 import com.abhijith.mindlol.ui.theme.Motion
 
+/** Stateful wrapper: gets the ViewModel and follows its state. */
 @Composable
-fun StatsScreen() {
-    // rememberSaveable: the chosen period survives tab switches and rotation.
-    var period by rememberSaveable { mutableStateOf(StatsPeriod.WEEK) }
-    val series = FakeData.series(period)
+fun StatsScreen(viewModel: StatsViewModel = viewModel(factory = StatsViewModel.Factory)) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // The selector follows the tap at once; the numbers follow when the new series is ready.
+    val selected by viewModel.selectedPeriod.collectAsStateWithLifecycle()
+    StatsContent(selected = selected, state = state, onSelect = viewModel::select)
+}
+
+@Composable
+fun StatsContent(selected: StatsPeriod, state: StatsUiState, onSelect: (StatsPeriod) -> Unit) {
+    val period = state.period
+    val series = state.series
 
     Column(
         modifier = Modifier
@@ -50,7 +58,8 @@ fun StatsScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(16.dp))
-        PeriodSelector(selected = period, onSelect = { period = it })
+        PeriodSelector(selected = selected, onSelect = onSelect)
+        if (series == null) return@Column // still loading the first numbers
 
         Spacer(Modifier.height(32.dp))
         AnimatedTotal(series.totalMinutes)
@@ -64,6 +73,14 @@ fun StatsScreen() {
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        if (series.hasEstimates) {
+            Text(
+                text = "≈ older days estimated from Android's summaries",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
 
         Spacer(Modifier.height(32.dp))
         UsageBarChart(series)
@@ -91,7 +108,7 @@ fun StatsScreen() {
         )
         Spacer(Modifier.height(16.dp))
         val total = series.totalMinutes.coerceAtLeast(1)
-        val most = series.apps.maxOf { it.minutes }.coerceAtLeast(1)
+        val most = series.apps.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
         series.apps.forEachIndexed { i, app ->
             AppUsageRow(
                 app = app,
@@ -120,6 +137,12 @@ private fun AnimatedTotal(totalMinutes: Int) {
 
 @Preview(heightDp = 900)
 @Composable
-private fun StatsScreenPreview() {
-    MindLolTheme { StatsScreen() }
+private fun StatsContentPreview() {
+    val sample = UsageSeries(
+        period = StatsPeriod.WEEK,
+        labels = listOf("Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"),
+        minutes = listOf(196, 241, 227, 158, 172, 149, 134),
+        apps = listOf(AppUsage("Instagram", 480), AppUsage("YouTube", 350), AppUsage("WhatsApp", 200))
+    )
+    MindLolTheme { StatsContent(StatsPeriod.WEEK, StatsUiState(StatsPeriod.WEEK, sample), onSelect = {}) }
 }

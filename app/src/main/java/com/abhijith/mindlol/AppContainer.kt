@@ -3,6 +3,8 @@ package com.abhijith.mindlol
 import android.content.Context
 import com.abhijith.mindlol.data.db.MindLolDatabase
 import com.abhijith.mindlol.data.prefs.AppPrefs
+import com.abhijith.mindlol.data.repository.UsageRepository
+import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.HistoryImporter
 import com.abhijith.mindlol.data.usage.UsageEventsReader
 import com.abhijith.mindlol.data.usage.UsagePermission
@@ -30,5 +32,9 @@ class AppContainer(context: Context) {
     val usageReader = UsageEventsReader(appContext)
     val historyImporter: HistoryImporter by lazy {
         HistoryImporter(appContext, database.usageDao(), prefs) { usageReader.excludedPackages }
+    }
+
+    val usageRepository: UsageRepository by lazy {
+        UsageRepository(database.usageDao(), usageReader, historyImporter, AppNames(appContext), usagePermission)
     }
 }

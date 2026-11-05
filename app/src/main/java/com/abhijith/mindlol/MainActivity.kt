@@ -44,9 +44,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val container = (application as MindLolApplication).container
         container.usagePermission.refresh()
-        // One-time import of older history. Moves into the repository's refresh in the next step.
+        // Pull fresh numbers from Android into Room on every app open (also runs the one-time import).
         if (container.usagePermission.granted.value) {
-            container.applicationScope.launch { container.historyImporter.importOnce() }
+            container.applicationScope.launch { container.usageRepository.refresh() }
         }
     }
 }

@@ -155,4 +155,32 @@ class SessionPairingTest {
         assertEquals(listOf(day, day.plusDays(1), day.plusDays(2)), result.map { it.date })
         assertEquals(0L, result[1].totalMs)
     }
+
+    @Test
+    fun hourlyTotals_splitSessionsAtHourBoundaries() {
+        val events = listOf(
+            ev("yt", 9, 50, EventKind.RESUMED),
+            ev("yt", 10, 20, EventKind.PAUSED)
+        )
+        val hours = SessionPairing.hourlyTotals(events, dayStart, dayEnd, ist)
+        assertEquals(24, hours.size)
+        assertEquals(min(10), hours[9])
+        assertEquals(min(20), hours[10])
+        assertEquals(min(30), hours.sum())
+    }
+
+    @Test
+    fun hourlyTotals_countOverlapOnce_andSkipExcluded() {
+        val events = listOf(
+            ev("yt", 14, 0, EventKind.RESUMED),
+            ev("wa", 14, 10, EventKind.RESUMED),
+            ev("yt", 14, 20, EventKind.PAUSED),
+            ev("wa", 14, 30, EventKind.PAUSED),
+            ev("launcher", 15, 0, EventKind.RESUMED),
+            ev("launcher", 15, 30, EventKind.PAUSED)
+        )
+        val hours = SessionPairing.hourlyTotals(events, dayStart, dayEnd, ist, setOf("launcher"))
+        assertEquals(min(30), hours[14])
+        assertEquals(0L, hours[15])
+    }
 }

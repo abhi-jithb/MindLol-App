@@ -24,26 +24,37 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abhijith.mindlol.data.repository.FakeData
-import com.abhijith.mindlol.domain.StatsPeriod
+import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.ui.components.AppUsageRow
 import com.abhijith.mindlol.ui.components.Mascot
-import com.abhijith.mindlol.ui.components.formatCount
 import com.abhijith.mindlol.ui.components.SmallStat
+import com.abhijith.mindlol.ui.components.formatCount
 import com.abhijith.mindlol.ui.components.formatMinutes
 import com.abhijith.mindlol.ui.components.pickMood
 import com.abhijith.mindlol.ui.components.revealOnEnter
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 import com.abhijith.mindlol.ui.theme.Motion
+import java.time.LocalTime
 
+/** Stateful wrapper: gets the ViewModel and follows its state. */
 @Composable
-fun HomeScreen() {
-    val today = FakeData.today
+fun HomeScreen(viewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory)) {
+    // Collects only while the screen is at least STARTED, so nothing runs in the background.
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    HomeContent(state)
+}
+
+/** Stateless: draws whatever state it is given. Easy to preview. */
+@Composable
+fun HomeContent(state: HomeUiState) {
     val mood = pickMood(
-        totalMinutes = today.totalMinutes,
-        averageMinutes = FakeData.series(StatsPeriod.WEEK).averageMinutes,
-        cheatsToday = today.cheatsToday,
-        now = FakeData.now,
+        totalMinutes = state.totalMinutes,
+        averageMinutes = state.weekAverageMinutes,
+        cheatsToday = state.cheatsToday,
+        now = LocalTime.now(),
         bedTime = FakeData.settings.bedTime
     )
 
@@ -55,11 +66,13 @@ fun HomeScreen() {
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        if (state.loading) return@Column // first frame only; Room answers almost at once
+
         Spacer(Modifier.height(32.dp))
         Mascot(mood = mood, size = 120.dp, modifier = Modifier.revealOnEnter(0))
         Spacer(Modifier.height(24.dp))
 
-        CountUpMinutes(today.totalMinutes)
+        CountUpMinutes(state.totalMinutes)
         Text(
             text = "SCREEN TIME TODAY",
             style = MaterialTheme.typography.labelMedium,
@@ -68,8 +81,13 @@ fun HomeScreen() {
 
         Spacer(Modifier.height(40.dp))
         Row(modifier = Modifier.fillMaxWidth().revealOnEnter(1)) {
-            SmallStat(value = formatCount(today.reelsCount), label = "REELS", modifier = Modifier.weight(1f))
-            SmallStat(value = formatCount(today.cheatsToday), label = "CHEATS", modifier = Modifier.weight(1f))
+            SmallStat(value = formatCount(state.reelsCount), label = "REELS", modifier = Modifier.weight(1f))
+            SmallStat(
+                value = state.unlocks?.let { formatCount(it) } ?: "–",
+                label = "UNLOCKS",
+                modifier = Modifier.weight(1f)
+            )
+            SmallStat(value = formatCount(state.cheatsToday), label = "CHEATS", modifier = Modifier.weight(1f))
         }
 
         Spacer(Modifier.height(48.dp))
@@ -80,8 +98,8 @@ fun HomeScreen() {
             modifier = Modifier.fillMaxWidth().revealOnEnter(2)
         )
         Spacer(Modifier.height(16.dp))
-        val most = today.topApps.maxOf { it.minutes }
-        today.topApps.forEachIndexed { i, app ->
+        val most = state.topApps.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
+        state.topApps.forEachIndexed { i, app ->
             AppUsageRow(app = app, fraction = app.minutes.toFloat() / most, modifier = Modifier.revealOnEnter(3 + i))
             Spacer(Modifier.height(20.dp))
         }
@@ -111,6 +129,17 @@ private fun CountUpMinutes(totalMinutes: Int) {
 
 @Preview(heightDp = 800)
 @Composable
-private fun HomeScreenPreview() {
-    MindLolTheme { HomeScreen() }
+private fun HomeContentPreview() {
+    MindLolTheme {
+        HomeContent(
+            HomeUiState(
+                loading = false,
+                totalMinutes = 134,
+                unlocks = 41,
+                topApps = listOf(AppUsage("Instagram", 52), AppUsage("YouTube", 37), AppUsage("WhatsApp", 21)),
+                weekAverageMinutes = 180,
+                hasData = true
+            )
+        )
+    }
 }
