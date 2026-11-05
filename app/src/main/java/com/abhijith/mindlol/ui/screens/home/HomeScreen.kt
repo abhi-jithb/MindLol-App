@@ -26,7 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.abhijith.mindlol.data.repository.FakeData
+import com.abhijith.mindlol.domain.SleepTime
 import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.ui.components.AppUsageRow
 import com.abhijith.mindlol.ui.components.Mascot
@@ -56,7 +56,7 @@ fun HomeContent(state: HomeUiState) {
         averageMinutes = state.weekAverageMinutes,
         cheatsToday = state.cheatsToday,
         now = LocalTime.now(),
-        bedTime = FakeData.settings.bedTime
+        bedTime = SleepTime.toLocalTime(state.bedtimeMinutes)
     )
 
     Column(

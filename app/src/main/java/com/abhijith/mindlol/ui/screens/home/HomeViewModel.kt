@@ -8,6 +8,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.abhijith.mindlol.MindLolApplication
 import com.abhijith.mindlol.data.repository.FakeData
 import com.abhijith.mindlol.data.repository.UsageRepository
+import com.abhijith.mindlol.data.settings.SettingsRepository
+import com.abhijith.mindlol.domain.Settings
 import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.domain.StatsPeriod
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +25,8 @@ data class HomeUiState(
     val topApps: List<AppUsage> = emptyList(),
     val weekAverageMinutes: Int = 0,
     val hasData: Boolean = false,
+    /** From Settings; the mascot gets sleepy near bedtime. */
+    val bedtimeMinutes: Int = Settings.DEFAULT_BEDTIME,
     val reelsCount: Int = FakeData.reelsToday,
     val cheatsToday: Int = FakeData.cheatsToday
 )
@@ -31,19 +35,24 @@ data class HomeUiState(
  * Holds Home's state and survives screen redraws and tab switches.
  * Like a React hook/store that outlives the component, or a Flutter ChangeNotifier.
  */
-class HomeViewModel(repository: UsageRepository) : ViewModel() {
+class HomeViewModel(repository: UsageRepository, settingsRepository: SettingsRepository) : ViewModel() {
 
     // stateIn turns a Flow into a StateFlow that always has a current value.
     // WhileSubscribed(5_000): keep listening 5 s after the screen goes away (survives rotation).
     val uiState: StateFlow<HomeUiState> =
-        combine(repository.todayUsage(), repository.series(StatsPeriod.WEEK)) { today, week ->
+        combine(
+            repository.todayUsage(),
+            repository.series(StatsPeriod.WEEK),
+            settingsRepository.settings
+        ) { today, week, settings ->
             HomeUiState(
                 loading = false,
                 totalMinutes = today.totalMinutes,
                 unlocks = today.unlocks,
                 topApps = today.topApps,
                 weekAverageMinutes = week.averageMinutes,
-                hasData = today.hasData
+                hasData = today.hasData,
+                bedtimeMinutes = settings.bedtimeMinutes
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -52,7 +61,7 @@ class HomeViewModel(repository: UsageRepository) : ViewModel() {
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as MindLolApplication
-                HomeViewModel(app.container.usageRepository)
+                HomeViewModel(app.container.usageRepository, app.container.settingsRepository)
             }
         }
     }

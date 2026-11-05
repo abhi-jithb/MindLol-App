@@ -3,7 +3,12 @@ package com.abhijith.mindlol
 import android.content.Context
 import android.util.Log
 import com.abhijith.mindlol.data.db.MindLolDatabase
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStoreFile
 import com.abhijith.mindlol.data.prefs.AppPrefs
+import com.abhijith.mindlol.data.settings.SettingsRepository
 import com.abhijith.mindlol.data.repository.UsageRepository
 import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.HistoryImporter
@@ -38,12 +43,23 @@ class AppContainer(context: Context) {
     )
 
     val prefs = AppPrefs(appContext)
+
+    /**
+     * The one DataStore for settings. DataStore must never have two instances for the same file
+     * (it throws), and AppContainer exists once per process, so creating it here is safe.
+     */
+    private val settingsDataStore: DataStore<Preferences> by lazy {
+        PreferenceDataStoreFactory.create { appContext.preferencesDataStoreFile("settings") }
+    }
+    val settingsRepository: SettingsRepository by lazy { SettingsRepository(settingsDataStore) }
+
+    val appNames = AppNames(appContext)
     val usageReader = UsageEventsReader(appContext)
     val historyImporter: HistoryImporter by lazy {
         HistoryImporter(appContext, database.usageDao(), prefs) { usageReader.excludedPackages }
     }
 
     val usageRepository: UsageRepository by lazy {
-        UsageRepository(database.usageDao(), usageReader, historyImporter, AppNames(appContext), usagePermission)
+        UsageRepository(database.usageDao(), usageReader, historyImporter, appNames, usagePermission)
     }
 }

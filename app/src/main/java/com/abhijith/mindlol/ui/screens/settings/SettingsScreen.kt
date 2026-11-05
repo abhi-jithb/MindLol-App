@@ -1,6 +1,27 @@
 package com.abhijith.mindlol.ui.screens.settings
 
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.key
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.abhijith.mindlol.domain.InstalledApp
+import com.abhijith.mindlol.domain.RoastIntensity
+import com.abhijith.mindlol.domain.Settings
+import com.abhijith.mindlol.domain.SleepTime
+import com.abhijith.mindlol.domain.TonightOverride
+import java.time.Instant
+import java.time.ZoneId
 import android.os.Build
 import android.os.PowerManager
 import androidx.compose.animation.core.Animatable
@@ -34,7 +55,6 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,28 +78,73 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 private val timeFormat = DateTimeFormatter.ofPattern("h:mm a")
+private val expiryFormat = DateTimeFormatter.ofPattern("EEE h:mm a")
 private const val LIMIT_STEP = 15
 
 // Which time the open picker is editing. Null means no picker is open.
-private enum class EditingTime { WAKE, BED }
+private enum class EditingTime { WAKE, BED, TONIGHT_WAKE, TONIGHT_BED }
 
 /**
- * Mostly UI only for now: changes live in memory and reset when the app closes.
- * The usage access row is real and opens system Settings when tapped.
+ * Sleep window, tonight's override, locked apps, limits and roast intensity are real and saved
+ * with DataStore (through [SettingsViewModel]). Theme is still preview only.
  */
 @Composable
 fun SettingsScreen(
     usageAccessGranted: Boolean,
     onOpenUsageSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    SettingsContent(
+        state = state,
+        actions = SettingsActions(
+            setWake = viewModel::setWake,
+            setBedtime = viewModel::setBedtime,
+            setTonightEnabled = viewModel::setTonightEnabled,
+            setTonightWake = viewModel::setTonightWake,
+            setTonightBedtime = viewModel::setTonightBedtime,
+            addApp = viewModel::addApp,
+            setLocked = viewModel::setLocked,
+            setLimit = viewModel::setLimit,
+            setRoastIntensity = viewModel::setRoastIntensity
+        ),
+        usageAccessGranted = usageAccessGranted,
+        onOpenUsageSettings = onOpenUsageSettings,
+        onOpenAppSettings = onOpenAppSettings
+    )
+}
+
+/** Everything the screen can change, bundled so [SettingsContent] stays free of the ViewModel (and previewable). */
+data class SettingsActions(
+    val setWake: (LocalTime) -> Unit = {},
+    val setBedtime: (LocalTime) -> Unit = {},
+    val setTonightEnabled: (Boolean) -> Unit = {},
+    val setTonightWake: (LocalTime) -> Unit = {},
+    val setTonightBedtime: (LocalTime) -> Unit = {},
+    val addApp: (String) -> Unit = {},
+    val setLocked: (String, Boolean) -> Unit = { _, _ -> },
+    val setLimit: (String, Int) -> Unit = { _, _ -> },
+    val setRoastIntensity: (RoastIntensity) -> Unit = {}
+)
+
+@Composable
+fun SettingsContent(
+    state: SettingsUiState,
+    actions: SettingsActions,
+    usageAccessGranted: Boolean,
+    onOpenUsageSettings: () -> Unit,
     onOpenAppSettings: () -> Unit
 ) {
-    val initial = FakeData.settings
-    var wake by rememberSaveable { mutableStateOf(initial.wakeTime) }
-    var bed by rememberSaveable { mutableStateOf(initial.bedTime) }
+    val settings = state.settings
+    val override = state.activeOverride
+    val wake = SleepTime.toLocalTime(settings.wakeMinutes)
+    val bed = SleepTime.toLocalTime(settings.bedtimeMinutes)
+
     var editing by rememberSaveable { mutableStateOf<EditingTime?>(null) }
-    // mutableStateListOf: a list Compose watches, so replacing an item redraws that row.
-    val rules = remember { mutableStateListOf(*initial.appRules.toTypedArray()) }
-    var theme by rememberSaveable { mutableStateOf(initial.selectedTheme) }
+    var pickingApp by rememberSaveable { mutableStateOf(false) }
+    val fake = FakeData.settings
+    var theme by rememberSaveable { mutableStateOf(fake.selectedTheme) }
 
     Column(
         modifier = Modifier
@@ -89,20 +154,55 @@ fun SettingsScreen(
             .padding(horizontal = 24.dp)
     ) {
         Spacer(Modifier.height(32.dp))
-        NightLength(bed = bed, wake = wake)
+        // Tonight's window wins while it applies, so the big number shows what really counts tonight.
+        NightLength(
+            bedMinutes = override?.bedtimeMinutes ?: settings.bedtimeMinutes,
+            wakeMinutes = override?.wakeMinutes ?: settings.wakeMinutes,
+            label = if (override != null) "PHONE-FREE TONIGHT" else "PHONE-FREE EACH NIGHT"
+        )
 
         SectionLabel("SCHEDULE", Modifier.revealOnEnter(1))
         SettingRow("Wake up", wake.format(timeFormat), Modifier.revealOnEnter(2)) { editing = EditingTime.WAKE }
         SettingRow("Bedtime", bed.format(timeFormat), Modifier.revealOnEnter(3)) { editing = EditingTime.BED }
 
-        SectionLabel("APP LIMITS AND LOCKS", Modifier.revealOnEnter(4))
-        rules.forEachIndexed { i, rule ->
-            AppRuleRow(
-                rule = rule,
-                onChange = { rules[i] = it },
-                modifier = Modifier.revealOnEnter(5 + i)
+        SectionLabel("TONIGHT IS DIFFERENT", Modifier.revealOnEnter(4))
+        TonightSection(
+            override = override,
+            onToggle = actions.setTonightEnabled,
+            onEditBed = { editing = EditingTime.TONIGHT_BED },
+            onEditWake = { editing = EditingTime.TONIGHT_WAKE },
+            modifier = Modifier.revealOnEnter(5)
+        )
+
+        SectionLabel("LOCKED APPS AND LIMITS", Modifier.revealOnEnter(6))
+        if (state.rules.isEmpty()) {
+            Text(
+                "No apps locked. Add the ones that keep you up.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
             )
         }
+        // key(): each row is tied to its package, so rows keep their identity when the list re-sorts.
+        state.rules.forEach { rule ->
+            key(rule.packageName) {
+                AppRuleRow(
+                    rule = rule,
+                    onLimitChange = { actions.setLimit(rule.packageName, it) },
+                    onLockChange = { actions.setLocked(rule.packageName, it) }
+                )
+            }
+        }
+        OutlinedButton(
+            onClick = { pickingApp = true },
+            enabled = state.addableApps.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Text("Add app")
+        }
+
+        SectionLabel("ROAST INTENSITY", Modifier.revealOnEnter(7))
+        RoastIntensitySelector(selected = settings.roastIntensity, onSelect = actions.setRoastIntensity)
 
         SectionLabel("PERMISSIONS", Modifier.revealOnEnter(8))
         PermissionRow(
@@ -113,13 +213,13 @@ fun SettingsScreen(
             ),
             onClick = onOpenUsageSettings
         )
-        initial.permissions.forEach { PermissionRow(it) }
+        fake.permissions.forEach { PermissionRow(it) }
 
         SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
         BackgroundLimitsSection(onOpenAppSettings)
 
         SectionLabel("THEME", Modifier.revealOnEnter(10))
-        initial.themeOptions.forEachIndexed { i, name ->
+        fake.themeOptions.forEachIndexed { i, name ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -136,7 +236,7 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(40.dp))
         Text(
-            text = "Preview only. Changes reset when the app closes.",
+            text = "Theme is preview only. Everything else is saved.",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -146,21 +246,173 @@ fun SettingsScreen(
     }
 
     editing?.let { which ->
+        val initial = when (which) {
+            EditingTime.WAKE -> wake
+            EditingTime.BED -> bed
+            EditingTime.TONIGHT_WAKE -> SleepTime.toLocalTime(override?.wakeMinutes ?: settings.wakeMinutes)
+            EditingTime.TONIGHT_BED -> SleepTime.toLocalTime(override?.bedtimeMinutes ?: settings.bedtimeMinutes)
+        }
         TimePickerDialog(
-            initial = if (which == EditingTime.WAKE) wake else bed,
+            initial = initial,
             onDismiss = { editing = null },
             onConfirm = { picked ->
-                if (which == EditingTime.WAKE) wake = picked else bed = picked
+                when (which) {
+                    EditingTime.WAKE -> actions.setWake(picked)
+                    EditingTime.BED -> actions.setBedtime(picked)
+                    EditingTime.TONIGHT_WAKE -> actions.setTonightWake(picked)
+                    EditingTime.TONIGHT_BED -> actions.setTonightBedtime(picked)
+                }
                 editing = null
+            }
+        )
+    }
+
+    if (pickingApp) {
+        AppPickerDialog(
+            apps = state.addableApps,
+            onDismiss = { pickingApp = false },
+            onPick = {
+                actions.addApp(it.packageName)
+                pickingApp = false
             }
         )
     }
 }
 
+/** The on/off switch, and when on, tonight's two times and when the override ends. */
+@Composable
+private fun TonightSection(
+    override: TonightOverride?,
+    onToggle: (Boolean) -> Unit,
+    onEditBed: () -> Unit,
+    onEditWake: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(value = override != null, role = Role.Switch, onValueChange = onToggle)
+                .padding(vertical = 10.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Custom window tonight", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                Text(
+                    "For the rare late night. Ends by itself.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = override != null, onCheckedChange = null)
+        }
+        // AnimatedVisibility: the rows slide open and closed instead of popping in.
+        AnimatedVisibility(visible = override != null) {
+            Column {
+                // Keep showing the last values while the rows animate out.
+                val shown = override ?: return@Column
+                SettingRow("Tonight's bedtime", SleepTime.toLocalTime(shown.bedtimeMinutes).format(timeFormat), onClick = onEditBed)
+                SettingRow("Tonight's wake up", SleepTime.toLocalTime(shown.wakeMinutes).format(timeFormat), onClick = onEditWake)
+                val ends = Instant.ofEpochMilli(shown.expiresAtMillis).atZone(ZoneId.systemDefault())
+                Text(
+                    "Back to normal after ${ends.format(expiryFormat)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+/** Three equal boxes; the chosen one turns white with black text. */
+@Composable
+private fun RoastIntensitySelector(selected: RoastIntensity, onSelect: (RoastIntensity) -> Unit) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().selectableGroup()
+        ) {
+            RoastIntensity.entries.forEach { option ->
+                val isSelected = option == selected
+                val fill by animateColorAsState(
+                    if (isSelected) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.background,
+                    Motion.standard(), label = "intensityFill"
+                )
+                val text by animateColorAsState(
+                    if (isSelected) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onBackground,
+                    Motion.standard(), label = "intensityText"
+                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, MaterialTheme.colorScheme.onBackground, RoundedCornerShape(8.dp))
+                        .background(fill, RoundedCornerShape(8.dp))
+                        .selectable(selected = isSelected, role = Role.RadioButton) { onSelect(option) }
+                        .padding(vertical = 12.dp)
+                ) {
+                    Text(option.name, style = MaterialTheme.typography.labelMedium, color = text)
+                }
+            }
+        }
+        Text(
+            text = when (selected) {
+                RoastIntensity.MILD -> "Disappointed, not cruel."
+                RoastIntensity.SAVAGE -> "Direct. About your choices, never about you."
+                RoastIntensity.PERSONAL -> "Savage, plus personal questions at unlock."
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
+}
+
+/** Search box over the launcher apps; tapping one adds a row for it. */
+@Composable
+private fun AppPickerDialog(apps: List<InstalledApp>, onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(apps, query) { apps.filter { it.label.contains(query.trim(), ignoreCase = true) } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        title = { Text("Add app") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Search") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                // LazyColumn only builds the rows on screen, like FlatList / ListView.builder.
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        Text(
+                            app.label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(app) }
+                                .padding(vertical = 12.dp)
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
 /** The screen's one big number: how long the phone stays off between bedtime and waking. */
 @Composable
-private fun NightLength(bed: LocalTime, wake: LocalTime) {
-    val minutesOff = Math.floorMod(wake.toSecondOfDay() / 60 - bed.toSecondOfDay() / 60, 24 * 60)
+private fun NightLength(bedMinutes: Int, wakeMinutes: Int, label: String) {
+    val minutesOff = SleepTime.windowLength(bedMinutes, wakeMinutes)
     val shown = remember { Animatable(minutesOff.toFloat()) }
     LaunchedEffect(minutesOff) { shown.animateTo(minutesOff.toFloat(), Motion.standard(Motion.LONG)) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -170,7 +422,7 @@ private fun NightLength(bed: LocalTime, wake: LocalTime) {
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "PHONE-FREE EACH NIGHT",
+            text = label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -201,12 +453,16 @@ private fun SettingRow(title: String, value: String, modifier: Modifier = Modifi
     }
 }
 
-/** App name, a − limit + stepper (15-minute steps, 0 means no limit) and a bedtime-lock switch. */
+/** App name, a − limit + stepper (15-minute steps, 0 means no limit) and a sleep-window lock switch. */
 @Composable
-private fun AppRuleRow(rule: AppRule, onChange: (AppRule) -> Unit, modifier: Modifier = Modifier) {
+private fun AppRuleRow(
+    rule: AppRule,
+    onLimitChange: (Int) -> Unit,
+    onLockChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val limit = rule.dailyLimitMinutes ?: 0
-    // copy() makes a new AppRule with one field changed, like {...rule, x} in JS.
-    fun setLimit(minutes: Int) = onChange(rule.copy(dailyLimitMinutes = minutes.takeIf { it > 0 }))
+    fun setLimit(minutes: Int) = onLimitChange(minutes) // 0 removes the limit
 
     Column(modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -231,12 +487,12 @@ private fun AppRuleRow(rule: AppRule, onChange: (AppRule) -> Unit, modifier: Mod
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                "Lock at bedtime",
+                "Lock during sleep window",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            Switch(checked = rule.lockedAtBedtime, onCheckedChange = { onChange(rule.copy(lockedAtBedtime = it)) })
+            Switch(checked = rule.lockedAtBedtime, onCheckedChange = onLockChange)
         }
         Spacer(Modifier.height(10.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
@@ -335,8 +591,22 @@ private fun TimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfir
     )
 }
 
-@Preview(heightDp = 1400)
+@Preview(heightDp = 1600)
 @Composable
-private fun SettingsScreenPreview() {
-    MindLolTheme { SettingsScreen(usageAccessGranted = false, onOpenUsageSettings = {}, onOpenAppSettings = {}) }
+private fun SettingsContentPreview() {
+    MindLolTheme {
+        SettingsContent(
+            state = SettingsUiState(
+                settings = Settings(roastIntensity = RoastIntensity.SAVAGE),
+                rules = listOf(
+                    AppRule("com.instagram.android", "Instagram", dailyLimitMinutes = 45, lockedAtBedtime = true),
+                    AppRule("com.google.android.youtube", "YouTube", dailyLimitMinutes = null, lockedAtBedtime = true)
+                )
+            ),
+            actions = SettingsActions(),
+            usageAccessGranted = false,
+            onOpenUsageSettings = {},
+            onOpenAppSettings = {}
+        )
+    }
 }

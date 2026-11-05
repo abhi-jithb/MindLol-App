@@ -1,7 +1,5 @@
 package com.abhijith.mindlol.domain
 
-import java.time.LocalTime
-
 // Plain data shapes the screens draw from.
 // Phase 1 fills them from FakeData; Phase 2 fills the same shapes with real usage.
 // All durations are in whole minutes.
@@ -62,7 +60,9 @@ data class TotalStat(
     val value: String
 )
 
+/** One app's rules, as Settings shows them. Stored by package name; [appName] is for display. */
 data class AppRule(
+    val packageName: String,
     val appName: String,
     val dailyLimitMinutes: Int?, // null means no limit
     val lockedAtBedtime: Boolean
@@ -74,10 +74,8 @@ data class PermissionInfo(
     val status: String
 )
 
+/** The parts of Settings that are still fake. The real rules live in [Settings]. */
 data class SettingsValues(
-    val wakeTime: LocalTime,
-    val bedTime: LocalTime,
-    val appRules: List<AppRule>,
     val permissions: List<PermissionInfo>,
     val themeOptions: List<String>,
     val selectedTheme: Int
