@@ -6,7 +6,7 @@ import com.abhijith.mindlol.domain.Streak
 import com.abhijith.mindlol.domain.TotalStat
 
 /**
- * The fake values that are still fake: reels, cheats, roasts, streaks, life-cost lines and
+ * The values that are still fake: reels, the reels streak, screen-time totals, life-cost lines and
  * settings. Usage numbers moved to UsageRepository in Phase 2; the rest becomes real in Phases 3–4.
  */
 object FakeData {
@@ -18,8 +18,6 @@ object FakeData {
     // ---------- Profile ----------
 
     val streaks = listOf(
-        Streak("Under daily limit", currentDays = 3, bestDays = 11),
-        Streak("In bed on time", currentDays = 0, bestDays = 6),
         Streak("No reels before 10 AM", currentDays = 1, bestDays = 4)
     )
 
@@ -28,7 +26,6 @@ object FakeData {
     val allTimeTotals = listOf(
         TotalStat("Screen time", "81h"),
         TotalStat("Reels watched", "4,120"),
-        TotalStat("Cheats", "37"),
         TotalStat("Phone pickups", "2,980")
     )
 
@@ -36,8 +33,7 @@ object FakeData {
     val lifeCosts = listOf(
         "412 reels ≈ one movie you didn't watch",
         "4,120 reels ≈ 23 hours of strangers' lives",
-        "81 hours ≈ 10 working days, given to glass",
-        "37 cheats ≈ 37 promises to yourself, renegotiated"
+        "81 hours ≈ 10 working days, given to glass"
     )
 
     // ---------- Settings ----------

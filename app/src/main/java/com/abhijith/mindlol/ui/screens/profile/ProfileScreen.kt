@@ -19,26 +19,46 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.abhijith.mindlol.data.repository.FakeData
+import com.abhijith.mindlol.domain.CheatStats
 import com.abhijith.mindlol.domain.Streak
 import com.abhijith.mindlol.ui.components.Mascot
 import com.abhijith.mindlol.ui.components.MascotMood
+import com.abhijith.mindlol.ui.components.MascotReaction
 import com.abhijith.mindlol.ui.components.SmallStat
 import com.abhijith.mindlol.ui.components.revealOnEnter
 import com.abhijith.mindlol.ui.theme.MindLolTheme
 import com.abhijith.mindlol.ui.theme.Motion
 
 @Composable
-fun ProfileScreen() {
-    val streaks = FakeData.streaks
-    // The headline is your longest running streak right now.
-    val top = streaks.maxBy { it.currentDays }
+fun ProfileScreen(viewModel: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory)) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    ProfileContent(state)
+}
+
+/**
+ * Stateless. Clean nights, the limit streak and the cheat counts are real (from Room);
+ * the reels streak, screen-time totals and most life-cost lines stay fake until Phase 4.
+ */
+@Composable
+fun ProfileContent(state: ProfileUiState) {
+    val stats = state.stats
+    val streaks = listOf(
+        Streak("Clean nights", stats.cleanNightsCurrent, stats.cleanNightsBest),
+        Streak("Under daily limit", stats.underLimitCurrent, stats.underLimitBest)
+    ) + FakeData.streaks
+    // A bad week earns the head shake; a clean run earns smugness.
+    val reaction = if (stats.cheatsThisWeek >= 3) MascotReaction.HEAD_SHAKE else MascotReaction.NONE
+    val mood = if (stats.cleanNightsCurrent > 0) MascotMood.SMUG else MascotMood.NEUTRAL
 
     Column(
         modifier = Modifier
@@ -48,16 +68,17 @@ fun ProfileScreen() {
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        if (state.loading) return@Column
         Spacer(Modifier.height(32.dp))
-        Mascot(mood = MascotMood.NEUTRAL, size = 88.dp, modifier = Modifier.revealOnEnter(0))
+        Mascot(mood = mood, reaction = reaction, size = 88.dp, modifier = Modifier.revealOnEnter(0))
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "${top.currentDays}",
+            text = "${stats.cleanNightsCurrent}",
             style = MaterialTheme.typography.displayLarge,
             color = MaterialTheme.colorScheme.onBackground
         )
         Text(
-            text = "DAY STREAK · ${top.name.uppercase()}",
+            text = "CLEAN NIGHTS IN A ROW",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -67,8 +88,15 @@ fun ProfileScreen() {
             StreakRow(streak, Modifier.revealOnEnter(2 + i))
         }
 
+        SectionLabel("CHEATS", Modifier.revealOnEnter(4))
+        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp).revealOnEnter(5)) {
+            SmallStat(value = "${stats.cheatsThisWeek}", label = "THIS WEEK", modifier = Modifier.weight(1f))
+            SmallStat(value = "${stats.cheatsThisMonth}", label = "THIS MONTH", modifier = Modifier.weight(1f))
+            SmallStat(value = "${stats.cheatsTotal}", label = "ALL TIME", modifier = Modifier.weight(1f))
+        }
+
         SectionLabel("SINCE ${FakeData.trackingSince.uppercase()}", Modifier.revealOnEnter(5))
-        // Two rows of two: a simple grid without a grid component.
+        // Rows of two: a simple grid without a grid component.
         FakeData.allTimeTotals.chunked(2).forEachIndexed { i, pair ->
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp).revealOnEnter(6 + i)) {
                 pair.forEach { stat ->
@@ -78,7 +106,8 @@ fun ProfileScreen() {
         }
 
         SectionLabel("WHAT IT COST YOU", Modifier.revealOnEnter(8))
-        FakeData.lifeCosts.forEachIndexed { i, line ->
+        val costs = FakeData.lifeCosts + "${stats.cheatsTotal} cheats ≈ ${stats.cheatsTotal} promises to yourself, renegotiated"
+        costs.forEachIndexed { i, line ->
             Column(Modifier.fillMaxWidth().revealOnEnter(9 + i)) {
                 Text(
                     text = line,
@@ -130,7 +159,8 @@ private fun StreakDots(current: Int, best: Int) {
     val on = MaterialTheme.colorScheme.onBackground
     val off = MaterialTheme.colorScheme.outline
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        repeat(best) { i ->
+        // Capped so a long best streak still fits on one line.
+        repeat(best.coerceAtMost(MAX_DOTS)) { i ->
             // How far this dot is into being filled, 0..1.
             val fill = (filled.value - i).coerceIn(0f, 1f)
             Canvas(Modifier.size(8.dp)) {
@@ -142,8 +172,12 @@ private fun StreakDots(current: Int, best: Int) {
     }
 }
 
+private const val MAX_DOTS = 21
+
 @Preview(heightDp = 1200)
 @Composable
-private fun ProfileScreenPreview() {
-    MindLolTheme { ProfileScreen() }
+private fun ProfileContentPreview() {
+    MindLolTheme {
+        ProfileContent(ProfileUiState(false, CheatStats(3, 6, 1, 4, 2, 7, 12)))
+    }
 }
