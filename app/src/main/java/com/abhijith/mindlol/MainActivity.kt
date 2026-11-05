@@ -27,4 +27,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // Runs every time the app returns to the foreground, including coming back from
+    // system Settings, so a freshly granted (or revoked) usage access shows up at once.
+    override fun onResume() {
+        super.onResume()
+        (application as MindLolApplication).container.usagePermission.refresh()
+    }
 }
