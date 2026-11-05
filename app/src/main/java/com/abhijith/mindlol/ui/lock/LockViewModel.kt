@@ -38,18 +38,21 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
     /** The confession field. TextFieldState keeps the text and cursor, like a controlled input in React. */
     val confession = TextFieldState()
 
-    private var openedFor: Triple<String, LockReason, LocalDate>? = null
+    private var openedFor: Pair<Triple<String, LockReason, LocalDate>, Boolean>? = null
     private var finished = false
 
-    /** Opens the lock for an app. Calling it again for the same app (e.g. after rotation) does nothing. */
-    fun open(packageName: String, reason: LockReason, periodDate: LocalDate) {
-        val key = Triple(packageName, reason, periodDate)
+    /**
+     * Opens the lock for an app. Calling it again for the same app (e.g. after rotation) does nothing.
+     * [test]: a debug test lock screen that writes nothing (see LiveLockRepository.openLockScreen).
+     */
+    fun open(packageName: String, reason: LockReason, periodDate: LocalDate, test: Boolean = false) {
+        val key = Triple(packageName, reason, periodDate) to test
         if (openedFor == key) return
         openedFor = key
         finished = false
         confession.edit { replace(0, length, "") }
         viewModelScope.launch {
-            val info = repository.openLockScreen(packageName, reason, periodDate)
+            val info = repository.openLockScreen(packageName, reason, periodDate, test = test)
             _state.value = LockUiState(info = info, step = LockScreenStep.STARE, countdownLeft = info.countdownSeconds)
             while (_state.value.countdownLeft > 0) {
                 delay(1_000)

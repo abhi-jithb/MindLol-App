@@ -2,6 +2,7 @@ package com.abhijith.mindlol.ui.lock
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
@@ -66,8 +67,12 @@ class LockActivity : ComponentActivity() {
         val pkg = intent.getStringExtra(EXTRA_PACKAGE) ?: return finish()
         val reason = intent.getStringExtra(EXTRA_REASON)?.let { runCatching { LockReason.valueOf(it) }.getOrNull() } ?: return finish()
         val date = intent.getStringExtra(EXTRA_PERIOD)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return finish()
-        viewModel.open(pkg, reason, date)
+        // A test lock screen is only honoured in a debuggable (debug) build; release ignores the flag.
+        val test = intent.getBooleanExtra(EXTRA_TEST, false) && isDebuggable()
+        viewModel.open(pkg, reason, date, test)
     }
+
+    private fun isDebuggable(): Boolean = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     /** Closes the lock and goes to the home screen. The locked app stays behind it, unused. */
     private fun goBackToSleep() {
@@ -80,12 +85,15 @@ class LockActivity : ComponentActivity() {
         private const val EXTRA_PACKAGE = "package"
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_PERIOD = "period"
+        private const val EXTRA_TEST = "test"
 
-        fun intent(context: Context, packageName: String, reason: LockReason, periodDate: LocalDate): Intent =
+        /** [test] = a debug test lock screen that writes nothing; only honoured in debug builds. */
+        fun intent(context: Context, packageName: String, reason: LockReason, periodDate: LocalDate, test: Boolean = false): Intent =
             Intent(context, LockActivity::class.java)
                 .putExtra(EXTRA_PACKAGE, packageName)
                 .putExtra(EXTRA_REASON, reason.name)
                 .putExtra(EXTRA_PERIOD, periodDate.toString())
+                .putExtra(EXTRA_TEST, test)
                 // A service has no task of its own, so the lock needs a new one.
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

@@ -111,19 +111,23 @@ class LiveLockRepository(
     /**
      * Saves a new lock_event (step 1 reached, outcome LEFT until something else happens) and works
      * out what the lock screen shows: the app's name, step 1's countdown (escalation), and the lines.
+     *
+     * [test] (debug builds only, from the adb test hook): nothing is written at all, so a test lock
+     * screen never counts in stats, cheats or escalation. Its event id is [TEST_EVENT_ID].
      */
     suspend fun openLockScreen(
         packageName: String,
         reason: LockReason,
         periodDate: LocalDate,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        test: Boolean = false
     ): LockScreenInfo = withContext(Dispatchers.IO) {
         val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
         val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
         val grantsToday = lockDao.grantsSince(nowMillis - DAY_MS).mapNotNull { it.toGrant() }
         val countdown = LiveLockDecider.countdownSeconds(LiveLockDecider.unlocksSinceReset(grantsToday, nowMillis, stored))
 
-        val eventId = lockDao.insertEvent(
+        val eventId = if (test) TEST_EVENT_ID else lockDao.insertEvent(
             LockEventEntity(
                 packageName = packageName, reason = reason, periodDate = periodDate, shownAtMillis = nowMillis,
                 stepReached = LockStep.STARE.number, outcome = LockOutcome.LEFT, countdownSeconds = countdown,
@@ -162,12 +166,19 @@ class LiveLockRepository(
         )
     }
 
-    suspend fun reachStep(eventId: Long, step: LockStep) = withContext(Dispatchers.IO) { lockDao.reachStep(eventId, step.number) }
+    suspend fun reachStep(eventId: Long, step: LockStep) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.reachStep(eventId, step.number)
+    }
 
-    suspend fun endLockScreen(eventId: Long, outcome: LockOutcome) = withContext(Dispatchers.IO) { lockDao.setOutcome(eventId, outcome) }
+    suspend fun endLockScreen(eventId: Long, outcome: LockOutcome) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.setOutcome(eventId, outcome)
+    }
 
-    private companion object {
-        const val MAX_GRANT_MS = 11 * 60_000L
-        const val DAY_MS = 24 * 60 * 60_000L
+    companion object {
+        /** The event id of a test lock screen: never a real row (Room ids start at 1). */
+        const val TEST_EVENT_ID = -1L
+
+        private const val MAX_GRANT_MS = 11 * 60_000L
+        private const val DAY_MS = 24 * 60 * 60_000L
     }
 }
