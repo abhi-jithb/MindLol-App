@@ -120,4 +120,43 @@ class RoastGeneratorTest {
         // Adding later cheats doesn't change the first cheat's context or line.
         assertEquals(build(first, listOf(first)), build(first, all))
     }
+
+    // ---------- Lock screen steps and LOCK_DISABLED ----------
+
+    @Test
+    fun lockDisabled_usesItsOwnPools() {
+        assertEquals(listOf(RoastPool.LOCK_DISABLED), RoastGenerator.poolsFor(ctx(type = CheatType.LOCK_DISABLED, week = 5, sameApp = 3)))
+        assertEquals(listOf(RoastPool.MILD_LOCK_DISABLED), RoastGenerator.poolsFor(ctx(type = CheatType.LOCK_DISABLED, intensity = RoastIntensity.MILD)))
+        assertEquals("You turned off your own lock. At 1:00 AM. Think about that.",
+            RoastGenerator.fill(RoastLines.lines.getValue(RoastPool.LOCK_DISABLED).first(), ctx(type = CheatType.LOCK_DISABLED, start = LocalTime.of(1, 0))))
+    }
+
+    @Test
+    fun everyStep_exceptInterrogation_hasLines_forEveryIntensityAndReason() {
+        for (intensity in RoastIntensity.entries) for (type in listOf(CheatType.BEDTIME, CheatType.LIMIT)) for (step in LockStep.entries) {
+            val line = RoastGenerator.stepLine(step, ctx(type = type, intensity = intensity))
+            if (step == LockStep.INTERROGATION) assertEquals(null, line)
+            else assertTrue("No line for $step $type $intensity", !line.isNullOrBlank() && !line.contains('{'))
+        }
+    }
+
+    @Test
+    fun stareLine_matchesTheLockReason() {
+        assertEquals(RoastPool.STEP_STARE_BEDTIME, RoastGenerator.stepPool(LockStep.STARE, CheatType.BEDTIME, RoastIntensity.SAVAGE))
+        assertEquals(RoastPool.STEP_STARE_LIMIT, RoastGenerator.stepPool(LockStep.STARE, CheatType.LIMIT, RoastIntensity.PERSONAL))
+        assertEquals(RoastPool.MILD_STEP_STARE, RoastGenerator.stepPool(LockStep.STARE, CheatType.LIMIT, RoastIntensity.MILD))
+    }
+
+    @Test
+    fun bargainLines_mentionCheatsThisWeek() {
+        RoastLines.lines.getValue(RoastPool.STEP_BARGAIN).forEach { assertTrue(it.contains("{count}") || it.contains("{next}")) }
+        assertEquals("This would be your 4th cheat this week. Pick your price.",
+            RoastGenerator.fill("This would be your {next} cheat this week. Pick your price.", ctx(week = 3)))
+    }
+
+    @Test
+    fun stepLine_sameLockScreenAndStep_sameLine() {
+        val a = RoastGenerator.stepLine(LockStep.STARE, ctx(seed = "lock-1"))
+        repeat(3) { assertEquals(a, RoastGenerator.stepLine(LockStep.STARE, ctx(seed = "lock-1"))) }
+    }
 }

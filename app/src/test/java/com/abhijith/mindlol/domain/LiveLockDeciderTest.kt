@@ -166,7 +166,7 @@ class LiveLockDeciderTest {
     private fun lockSession(connected: Long, lastAlive: Long, disconnected: Long? = null, bootAt: Long = boot) =
         LockSession(connected, lastAlive, disconnected, bootAt)
 
-    private fun cheatsFor(sessions: List<LockSession>, screenOn: List<ScreenOnInterval>, now: Long, running: Boolean) =
+    private fun cheatsFor(sessions: List<LockSession>, screenOn: List<ScreenOnInterval>?, now: Long, running: Boolean) =
         LiveLockDecider.lockDisabledCheats(thuNight, LiveLockDecider.lockOffIntervals(sessions, screenOn, now, running), now)
 
     @Test
@@ -287,5 +287,13 @@ class LiveLockDeciderTest {
         val merged = RulesPlanner.mergeWithSaved(later, first).single()
         assertEquals(first.single().key, merged.key)
         assertEquals(120, merged.minutes)
+    }
+
+    @Test
+    fun noScreenData_noLockDisabledCheat() {
+        // The same "lock off at 00:30 and never back" gap as serviceOffWhileScreenOn_isCheat,
+        // but without screen data (Android 8, or events missing): no evidence, no cheat.
+        val sessions = listOf(lockSession(at(thu, 7), at(fri, 0, 30), disconnected = at(fri, 0, 30)))
+        assertTrue(cheatsFor(sessions, screenOn = null, now = at(fri, 12), running = false).isEmpty())
     }
 }

@@ -36,6 +36,15 @@ sealed interface LockDecision {
 /** A stretch of time when the live lock wasn't running (service off, or MindLol force-stopped). */
 data class LockOffInterval(val startMillis: Long, val endMillis: Long)
 
+/** The unlock steps, in order. [number] is what lock_event.stepReached stores. */
+enum class LockStep(val number: Int) {
+    STARE(1),
+    CONFESSION(2),
+    INTERROGATION(3),
+    BARGAIN(4),
+    LAST_CHANCE(5)
+}
+
 /** How one lock screen ended. */
 enum class LockOutcome {
     /** Every step done: the app was opened for the chosen minutes. */
@@ -182,13 +191,17 @@ object LiveLockDecider {
      *
      * Only the parts of each gap where the screen was on count. A phone that was off, a dead
      * battery, or a service killed while you slept (screen off) is never a cheat.
+     *
+     * Never accuse without evidence: [screenOn] is null when screen data isn't available (screen
+     * events need Android 9, API 28; minSdk is 26), and then no gap counts at all.
      */
     fun lockOffIntervals(
         sessions: List<LockSession>,
-        screenOn: List<ScreenOnInterval>,
+        screenOn: List<ScreenOnInterval>?,
         nowMillis: Long,
         runningNow: Boolean
     ): List<LockOffInterval> {
+        if (screenOn == null) return emptyList()
         val sorted = sessions.sortedBy { it.connectedAtMillis }
         val gaps = mutableListOf<LockOffInterval>()
         sorted.forEachIndexed { i, session ->

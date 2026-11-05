@@ -16,6 +16,10 @@ package com.abhijith.mindlol.domain
  *   {nth}      this cheat's number this week      "3rd"
  *   {count}    cheats this week, including this   "3"
  *   {appNth}   this app's cheat number this week  "2nd"
+ *   {next}     the number the next cheat would be "4th"  (lock screen bargain)
+ *
+ * The STEP_ pools are the lock screen's lines (Phase 3b), one pool per unlock step. The
+ * interrogation step has no pool here: its lines live with the cards in InterrogationCards.kt.
  */
 enum class RoastPool {
     BEDTIME,          // any bedtime cheat
@@ -28,7 +32,20 @@ enum class RoastPool {
     MILD_BEDTIME,     // MILD intensity only
     MILD_LIMIT,
     PERSONAL_BEDTIME, // added to the pool only with PERSONAL intensity
-    PERSONAL_LIMIT
+    PERSONAL_LIMIT,
+    LOCK_DISABLED,    // the live lock was turned off during a sleep window
+    MILD_LOCK_DISABLED,
+
+    // Lock screen steps. SAVAGE and PERSONAL use these; MILD uses the MILD_STEP_ ones.
+    STEP_STARE_BEDTIME,
+    STEP_STARE_LIMIT,
+    STEP_CONFESSION,
+    STEP_BARGAIN,
+    STEP_LAST_CHANCE,
+    MILD_STEP_STARE,
+    MILD_STEP_CONFESSION,
+    MILD_STEP_BARGAIN,
+    MILD_STEP_LAST_CHANCE
 }
 
 object RoastLines {
@@ -105,6 +122,60 @@ object RoastLines {
         RoastPool.PERSONAL_LIMIT to listOf(
             "You told yourself {limit} minutes. You lied to yourself.",
             "Somewhere your future self is tired because of these {minutes} minutes."
+        ),
+        RoastPool.LOCK_DISABLED to listOf(
+            "You turned off your own lock. At {time}. Think about that.",
+            "The lock was yours. You switched it off to cheat.",
+            "{minutes} minutes with the lock off. That's not freedom, that's sabotage.",
+            "Turning off the lock doesn't delete the rule. I noticed.",
+            "You didn't beat the lock. You just stopped pretending."
+        ),
+        RoastPool.MILD_LOCK_DISABLED to listOf(
+            "The live lock was off for {minutes} minutes during sleep time.",
+            "Your lock was turned off at {time}. Leave it on tonight."
+        ),
+
+        // ---------- Lock screen steps ----------
+
+        RoastPool.STEP_STARE_BEDTIME to listOf(
+            "It's {time}. Bedtime was {bed}. Put it down.",
+            "You set this rule yourself. Remember that.",
+            "Future you wakes up at {wake}. Present you is about to steal from him.",
+            "{app}? At {time}? I'm watching.",
+            "Go back to sleep. This isn't a negotiation. Yet."
+        ),
+        RoastPool.STEP_STARE_LIMIT to listOf(
+            "{limit} minutes. That was your number. You hit it.",
+            "Your {app} limit is done for today.",
+            "You gave {app} {limit} minutes. It took them all."
+        ),
+        RoastPool.STEP_CONFESSION to listOf(
+            "Say it. Every word.",
+            "If you mean it, type it.",
+            "Own it. Letter by letter."
+        ),
+        RoastPool.STEP_BARGAIN to listOf(
+            "{count} cheats this week already. How many minutes is this one worth?",
+            "This would be your {next} cheat this week. Pick your price.",
+            "{count} so far this week. Choose how long you'll regret it."
+        ),
+        RoastPool.STEP_LAST_CHANCE to listOf(
+            "Hold it. Three seconds to change your mind.",
+            "Last chance. I'm not watching this.",
+            "Hold the button. Or don't, and sleep."
+        ),
+        RoastPool.MILD_STEP_STARE to listOf(
+            "It's {time}, past your {bed} bedtime. Maybe tomorrow?",
+            "This is your own rule. Want to keep it?"
+        ),
+        RoastPool.MILD_STEP_CONFESSION to listOf(
+            "If you're sure, type it out."
+        ),
+        RoastPool.MILD_STEP_BARGAIN to listOf(
+            "{count} cheats this week so far. How long do you need?"
+        ),
+        RoastPool.MILD_STEP_LAST_CHANCE to listOf(
+            "Hold to open. Or let go and rest."
         )
     )
 }

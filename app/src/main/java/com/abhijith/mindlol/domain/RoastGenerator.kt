@@ -49,6 +49,9 @@ object RoastGenerator {
      * far over the limit); the general pool is the fallback. PERSONAL adds its own lines.
      */
     fun poolsFor(context: RoastContext): List<RoastPool> {
+        if (context.type == CheatType.LOCK_DISABLED) {
+            return listOf(if (context.intensity == RoastIntensity.MILD) RoastPool.MILD_LOCK_DISABLED else RoastPool.LOCK_DISABLED)
+        }
         val bedtime = context.type == CheatType.BEDTIME
         if (context.intensity == RoastIntensity.MILD) {
             return listOf(if (bedtime) RoastPool.MILD_BEDTIME else RoastPool.MILD_LIMIT)
@@ -74,6 +77,33 @@ object RoastGenerator {
         .replace("{nth}", ordinal(c.cheatsThisWeek))
         .replace("{count}", c.cheatsThisWeek.toString())
         .replace("{appNth}", ordinal(c.sameAppThisWeek))
+        .replace("{next}", ordinal(c.cheatsThisWeek + 1))
+
+    /**
+     * The lock screen's line for one step. [context] describes the moment (app, time, cheats so far
+     * this week; type BEDTIME or LIMIT for the lock's reason). Same lock screen and step, same line.
+     * Returns null for the interrogation step: its lines come from the card.
+     */
+    fun stepLine(step: LockStep, context: RoastContext, lines: Map<RoastPool, List<String>> = RoastLines.lines): String? {
+        val pool = stepPool(step, context.type, context.intensity) ?: return null
+        val options = lines[pool].orEmpty().ifEmpty { return null }
+        return fill(options[Math.floorMod("${context.seed}|$step".hashCode(), options.size)], context)
+    }
+
+    fun stepPool(step: LockStep, type: CheatType, intensity: RoastIntensity): RoastPool? {
+        val mild = intensity == RoastIntensity.MILD
+        return when (step) {
+            LockStep.STARE -> when {
+                mild -> RoastPool.MILD_STEP_STARE
+                type == CheatType.LIMIT -> RoastPool.STEP_STARE_LIMIT
+                else -> RoastPool.STEP_STARE_BEDTIME
+            }
+            LockStep.CONFESSION -> if (mild) RoastPool.MILD_STEP_CONFESSION else RoastPool.STEP_CONFESSION
+            LockStep.INTERROGATION -> null
+            LockStep.BARGAIN -> if (mild) RoastPool.MILD_STEP_BARGAIN else RoastPool.STEP_BARGAIN
+            LockStep.LAST_CHANCE -> if (mild) RoastPool.MILD_STEP_LAST_CHANCE else RoastPool.STEP_LAST_CHANCE
+        }
+    }
 
     /** "11" for 23:00, "11:30" for 23:30. */
     fun shortTime(t: LocalTime): String {
