@@ -147,6 +147,24 @@ class CheatRepository(
         dao.period(PeriodKind.DAY, today(nowMillis)) != null
     }
 
+    /**
+     * ONE-TIME cleanup, the only exception to "cheats are never deleted". Before c95a037, the first
+     * refresh judged the days before any rules existed using the settings of that moment. This
+     * removes those cheats and snapshots (every period that started before [AppPrefs.rulesSinceMillis]),
+     * then sets a flag so it never runs again. On a fresh install there is nothing to clean.
+     */
+    suspend fun cleanUpPreRulesDataOnce() = withContext(Dispatchers.IO) {
+        lock.withLock {
+            if (prefs.preRulesCleanupDone) return@withLock
+            val since = prefs.rulesSinceMillis
+            if (since != null) {
+                val (cheats, periods) = dao.deletePreRulesData(since)
+                Log.i(TAG, "Pre-rules cleanup: deleted $cheats cheats and $periods snapshots that started before $since")
+            }
+            prefs.preRulesCleanupDone = true
+        }
+    }
+
     /** When rules were first saved; recorded the first time snapshots are about to be written. */
     private fun rulesSince(nowMillis: Long): Long =
         prefs.rulesSinceMillis ?: nowMillis.also { prefs.rulesSinceMillis = it }

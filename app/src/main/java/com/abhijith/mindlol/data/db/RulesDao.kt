@@ -64,4 +64,25 @@ interface RulesDao {
         upsertPeriods(periods)
         saveCheats(cheats)
     }
+
+    // ---------- One-time cleanup (the only place anything is deleted) ----------
+
+    /** Cheats whose night/day started before [since], i.e. before any rules existed. */
+    @Query(
+        "DELETE FROM cheat WHERE " +
+            "(type = 'BEDTIME' AND periodDate IN (SELECT date FROM judged_period WHERE kind = 'NIGHT' AND startMillis < :since)) " +
+            "OR (type = 'LIMIT' AND periodDate IN (SELECT date FROM judged_period WHERE kind = 'DAY' AND startMillis < :since))"
+    )
+    suspend fun deleteCheatsOfPeriodsBefore(since: Long): Int
+
+    @Query("DELETE FROM judged_period WHERE startMillis < :since")
+    suspend fun deletePeriodsBefore(since: Long): Int
+
+    /** Cheats first (their periods are needed to find them), then the periods. All or nothing. */
+    @Transaction
+    suspend fun deletePreRulesData(since: Long): Pair<Int, Int> {
+        val cheats = deleteCheatsOfPeriodsBefore(since)
+        val periods = deletePeriodsBefore(since)
+        return cheats to periods
+    }
 }

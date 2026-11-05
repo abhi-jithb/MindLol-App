@@ -25,8 +25,14 @@ class AppPrefs(context: Context) {
             else prefs.edit().putLong(KEY_RULES_SINCE, value).apply()
         }
 
+    /** True once the one-time cleanup of cheats judged before any rules existed has run. */
+    var preRulesCleanupDone: Boolean
+        get() = prefs.getBoolean(KEY_PRE_RULES_CLEANUP, false)
+        set(value) = prefs.edit().putBoolean(KEY_PRE_RULES_CLEANUP, value).apply()
+
     private companion object {
         const val KEY_HISTORY_IMPORTED = "history_imported"
+        const val KEY_PRE_RULES_CLEANUP = "pre_rules_cleanup_done"
         const val KEY_RULES_SINCE = "rules_since_millis"
     }
 }
