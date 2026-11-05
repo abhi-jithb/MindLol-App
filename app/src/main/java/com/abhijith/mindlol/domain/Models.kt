@@ -41,12 +41,12 @@ data class UsageSeries(
     val peakIndex: Int get() = minutes.indices.maxByOrNull { minutes[it] } ?: 0
 }
 
-/** One broken rule, with the line the app roasts you with. */
+/** One cheat ready to show: the cheat, its app's name, its roast line and the context the line came from. */
 data class CheatEntry(
-    val day: String,
-    val time: String,
+    val cheat: Cheat,
     val appName: String,
-    val roast: String
+    val roast: String,
+    val context: RoastContext
 )
 
 data class Streak(

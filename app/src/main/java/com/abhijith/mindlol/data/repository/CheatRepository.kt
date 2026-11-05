@@ -5,20 +5,31 @@ import com.abhijith.mindlol.data.db.RulesDao
 import com.abhijith.mindlol.data.db.toDomain
 import com.abhijith.mindlol.data.db.toEntity
 import com.abhijith.mindlol.data.settings.SettingsRepository
+import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.UsageEventsReader
+import com.abhijith.mindlol.domain.Cheat
+import com.abhijith.mindlol.domain.CheatEntry
+import com.abhijith.mindlol.domain.RoastGenerator
+import com.abhijith.mindlol.domain.RulesSnapshot
+import com.abhijith.mindlol.domain.SleepTime
 import com.abhijith.mindlol.domain.PeriodKind
 import com.abhijith.mindlol.domain.RulesPlanner
 import com.abhijith.mindlol.domain.Settings
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 
 /**
@@ -28,7 +39,8 @@ import java.time.ZoneId
 class CheatRepository(
     private val dao: RulesDao,
     private val settingsRepository: SettingsRepository,
-    private val reader: UsageEventsReader
+    private val reader: UsageEventsReader,
+    private val appNames: AppNames
 ) {
     // Judging and writing upcoming snapshots both read-then-write the same rows: one at a time.
     private val lock = Mutex()
@@ -83,6 +95,40 @@ class CheatRepository(
             }
         }
     }
+
+    /** Every saved cheat as domain objects, newest first. Emits again whenever a refresh saves cheats. */
+    fun cheats(): Flow<List<Cheat>> = dao.observeCheats().map { rows -> rows.map { it.toDomain() } }
+
+    /** Every saved snapshot, oldest first. Used for streaks (which nights had rules, which are final). */
+    fun periods(): Flow<List<RulesSnapshot>> = dao.observePeriods().map { rows -> rows.map { it.toDomain() } }
+
+    /**
+     * Cheats ready to show, newest first, each with its roast line. The line uses the rules of
+     * the cheat's own night or day (its snapshot), so changing settings later doesn't rewrite it.
+     * Only the roast intensity comes from current settings.
+     */
+    fun cheatLog(): Flow<List<CheatEntry>> =
+        combine(cheats(), periods(), settingsRepository.settings) { cheats, periods, settings ->
+            val byKey = periods.associateBy { it.kind to it.date }
+            cheats.map { cheat ->
+                val appName = appNames.labelFor(cheat.packageName)
+                val night = byKey[PeriodKind.NIGHT to cheat.periodDate]
+                val day = byKey[PeriodKind.DAY to cheat.periodDate]
+                val context = RoastGenerator.contextFor(
+                    cheat = cheat,
+                    allCheats = cheats,
+                    appName = appName,
+                    bedtime = night?.let { localTime(it.startMillis) } ?: SleepTime.toLocalTime(settings.bedtimeMinutes),
+                    wake = night?.let { localTime(it.endMillis) } ?: SleepTime.toLocalTime(settings.wakeMinutes),
+                    limitMinutes = day?.limits?.get(cheat.packageName),
+                    intensity = settings.roastIntensity,
+                    zone = zone
+                )
+                CheatEntry(cheat, appName, RoastGenerator.roast(context), context)
+            }
+        }.flowOn(Dispatchers.IO) // app names and roasts are built off the main thread
+
+    private fun localTime(millis: Long): LocalTime = Instant.ofEpochMilli(millis).atZone(zone).toLocalTime()
 
     /** True while tonight's window is running. The override can't be changed then. */
     suspend fun isTonightLocked(nowMillis: Long = System.currentTimeMillis()): Boolean = withContext(Dispatchers.IO) {

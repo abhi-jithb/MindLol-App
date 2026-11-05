@@ -1,6 +1,5 @@
 package com.abhijith.mindlol.data.repository
 
-import com.abhijith.mindlol.domain.CheatEntry
 import com.abhijith.mindlol.domain.PermissionInfo
 import com.abhijith.mindlol.domain.SettingsValues
 import com.abhijith.mindlol.domain.Streak
@@ -16,19 +15,6 @@ object FakeData {
 
     val reelsToday = 87
     val cheatsToday = 2
-
-    // ---------- Cheat log ----------
-
-    val cheatLog = listOf(
-        CheatEntry("Today", "12:47 AM", "Instagram", "Bedtime was 11. Instagram disagreed."),
-        CheatEntry("Today", "9:12 AM", "YouTube", "\"Just one video\" before work. It was four."),
-        CheatEntry("Yesterday", "1:40 AM", "Instagram", "3rd time this week you outsmarted yourself at 1:40 AM."),
-        CheatEntry("Yesterday", "6:05 PM", "X", "20-minute limit. You saw it as a suggestion."),
-        CheatEntry("Tue", "11:58 PM", "YouTube", "Two minutes to bedtime. You chose violence."),
-        CheatEntry("Mon", "2:15 AM", "Instagram", "The reels will still be there tomorrow. So will your eye bags."),
-        CheatEntry("Sun", "10:30 AM", "Instagram", "Unlocked it 6 times before breakfast. Breakfast lost."),
-        CheatEntry("Sat", "12:20 AM", "WhatsApp", "Group chat at midnight. Nobody said anything worth it.")
-    )
 
     // ---------- Profile ----------
 

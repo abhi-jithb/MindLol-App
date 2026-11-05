@@ -9,6 +9,7 @@ import androidx.room.Update
 import androidx.room.Upsert
 import com.abhijith.mindlol.domain.CheatType
 import com.abhijith.mindlol.domain.PeriodKind
+import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
 /** Reads and writes the rules snapshots and cheats. Cheats are never deleted here. */
@@ -17,6 +18,14 @@ interface RulesDao {
 
     @Query("SELECT * FROM judged_period WHERE date >= :from")
     suspend fun periodsFrom(from: LocalDate): List<JudgedPeriodEntity>
+
+    /** Every snapshot; emits again whenever the table changes. */
+    @Query("SELECT * FROM judged_period ORDER BY date")
+    fun observePeriods(): Flow<List<JudgedPeriodEntity>>
+
+    /** Every cheat, newest first; emits again whenever the table changes. */
+    @Query("SELECT * FROM cheat ORDER BY startMillis DESC")
+    fun observeCheats(): Flow<List<CheatEntity>>
 
     @Query("SELECT * FROM judged_period WHERE kind = :kind AND date = :date")
     suspend fun period(kind: PeriodKind, date: LocalDate): JudgedPeriodEntity?
