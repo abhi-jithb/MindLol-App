@@ -1,5 +1,8 @@
 package com.abhijith.mindlol.ui.components
 
+import android.content.Context
+import android.provider.Settings
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -19,7 +22,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -28,6 +33,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
@@ -110,7 +117,9 @@ private data class Face(
     val rightBrowLift: Float,
     val browWorry: Float,   // raises the inner ends of both brows
     val zzz: Float,         // floating Z's
-    val sweat: Float        // sweat drop
+    val sweat: Float,       // sweat drop
+    val browDrop: Float = 0f,   // lowers both brows without tilting them (serious, not angry)
+    val mouthWidth: Float = 1f  // 1 = normal width; NOD uses a short tight line
 )
 
 private fun faceFor(mood: MascotMood): Face = when (mood) {
@@ -127,7 +136,8 @@ private fun faceFor(reaction: MascotReaction): Face? = when (reaction) {
     MascotReaction.FACEPALM -> Face(0.08f, 0f, 0f, -0.4f, 0f, 0f, 1f, 1f, 0f, 0.8f, 0f, 0f)
     MascotReaction.HEAD_SHAKE -> Face(0.6f, 1f, 0f, -0.5f, 0f, 0f, 1f, 1f, 0f, 0.6f, 0f, 0f)
     MascotReaction.TURN_AWAY -> Face(0.6f, 1f, 0f, -0.2f, 0f, 0f, 1f, 1f, 0f, -0.4f, 0f, 0f)
-    MascotReaction.NOD -> Face(0.55f, 1f, 0f, 0f, 0f, 0f, 1f, 1f, 0f, 0f, 0f, 0f)
+    // Half-closed eyes under flat lids, straight low brows, a short tight mouth: "makes sense."
+    MascotReaction.NOD -> Face(0.55f, 1f, 0f, 0f, 0f, 0f, 1f, 1f, 0f, 0f, 0f, 0f, browDrop = 0.35f, mouthWidth = 0.6f)
 }
 
 /**
@@ -150,7 +160,15 @@ private fun armsFor(reaction: MascotReaction): Arms = when (reaction) {
 }
 
 /** Per-frame extras: the face slides (shake, nod, turn) and fades (turn away); [still] stops breathing and blinking. Offsets are in body radii. */
-private data class Pose(val dx: Float, val dy: Float, val featureAlpha: Float, val still: Float, val turned: Float)
+private data class Pose(
+    val dx: Float,
+    val dy: Float,
+    val featureAlpha: Float,
+    val still: Float,
+    val turned: Float,
+    /** 0..1 how deep into the nod: closes the eyes, tips the tuft forward, squashes the body a little. */
+    val nod: Float = 0f
+)
 
 @Composable
 private fun animated(target: Float): Float =
@@ -182,7 +200,9 @@ fun Mascot(
         rightBrowLift = animated(target.rightBrowLift),
         browWorry = animated(target.browWorry),
         zzz = animated(target.zzz),
-        sweat = animated(target.sweat)
+        sweat = animated(target.sweat),
+        browDrop = animated(target.browDrop),
+        mouthWidth = animated(target.mouthWidth)
     )
 
     val armTarget = armsFor(reaction)
@@ -231,8 +251,34 @@ fun Mascot(
         label = "reactionCycle"
     )
     val shake = if (reaction == MascotReaction.HEAD_SHAKE) shakeOffset(cycle) else 0f
-    val nod = if (reaction == MascotReaction.NOD) nodOffset(cycle) else 0f
-    val pose = Pose(dx = shake + turned * 0.9f, dy = nod, featureAlpha = 1f - turned, still = still, turned = turned)
+
+    // The nod has its own 3.2 s timeline that starts at 0 the moment NOD begins (when the card's
+    // reply starts), instead of joining a loop halfway. With animations off, it holds the bottom pose.
+    val context = LocalContext.current
+    val animationsOff = remember { animationsDisabled(context) }
+    val nodTime = remember { Animatable(0f) }
+    LaunchedEffect(reaction, animationsOff) {
+        nodTime.snapTo(0f)
+        if (reaction == MascotReaction.NOD && !animationsOff) {
+            while (true) {
+                nodTime.snapTo(0f)
+                nodTime.animateTo(1f, tween(NOD_CYCLE_MS, easing = LinearEasing))
+            }
+        }
+    }
+    val nodDepth = when {
+        reaction != MascotReaction.NOD -> 0f
+        animationsOff -> 1f
+        else -> nodDepth(nodTime.value)
+    }
+    val pose = Pose(
+        dx = shake + turned * 0.9f,
+        dy = nodDepth * NOD_DROP,
+        featureAlpha = 1f - turned,
+        still = still,
+        turned = turned,
+        nod = nodDepth
+    )
 
     val label = if (reaction != MascotReaction.NONE) reaction.description else "looking ${mood.description}"
     Canvas(
@@ -248,9 +294,28 @@ fun Mascot(
 private fun shakeOffset(t: Float): Float =
     if (t < 0.7f) 0.13f * sin(t / 0.7f * 3f * 2f * PI.toFloat()) else 0f
 
-/** Two slow dips in the first 70% of the cycle, then a pause. Always downward. In body radii. */
-private fun nodOffset(t: Float): Float =
-    if (t < 0.7f) 0.12f * sin(t / 0.7f * 2f * PI.toFloat()).let { it * it } else 0f
+private const val NOD_CYCLE_MS = 3200
+private const val NOD_DROP = 0.125f // how far the face dips, in body radii
+
+/**
+ * One slow, serious nod per 3.2 s cycle ([t] is 0..1): 0.9 s easing down, 0.3 s holding at the
+ * bottom, 0.9 s easing back up, then 1.1 s still. Returns the depth, 0 (up) to 1 (bottom).
+ */
+private fun nodDepth(t: Float): Float {
+    val down = 900f / NOD_CYCLE_MS
+    val hold = 300f / NOD_CYCLE_MS
+    val up = 900f / NOD_CYCLE_MS
+    return when {
+        t < down -> FastOutSlowInEasing.transform(t / down)
+        t < down + hold -> 1f
+        t < down + hold + up -> 1f - FastOutSlowInEasing.transform((t - down - hold) / up)
+        else -> 0f
+    }
+}
+
+/** True when the phone's "Animator duration scale" is off. Compose animations would then jump to their end. */
+private fun animationsDisabled(context: Context): Boolean =
+    Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
 private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift: Float, arms: Arms, pose: Pose) {
     val s = size.minDimension
@@ -261,8 +326,9 @@ private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift:
     val line = Stroke(width = stroke, cap = StrokeCap.Round)
 
     // Body: black fill, white outline, a little squash and stretch while breathing.
-    val bodyW = r * (1f - breath * 0.012f)
-    val bodyH = r * (1f + breath * 0.012f)
+    // The nod adds a 2% squash at its bottom, as if it has weight.
+    val bodyW = r * (1f - breath * 0.012f + pose.nod * 0.02f)
+    val bodyH = r * (1f + breath * 0.012f - pose.nod * 0.02f)
     val bodyTopLeft = Offset(cx - bodyW, cy - bodyH)
     val bodySize = Size(bodyW * 2, bodyH * 2)
     drawOval(Black, bodyTopLeft, bodySize)
@@ -275,7 +341,10 @@ private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift:
         moveTo(cx - r * 0.05f * flip, top)
         quadraticTo(cx + r * 0.3f * flip, top - r * 0.3f, cx + r * 0.05f * flip, top - r * 0.42f)
     }
-    drawPath(tuft, White, style = line)
+    // At the bottom of a nod the tuft tips forward about 15 degrees, pivoting where it meets the head.
+    rotate(degrees = pose.nod * 15f, pivot = Offset(cx - r * 0.05f * flip, top)) {
+        drawPath(tuft, White, style = line)
+    }
 
     // The face (eyes, brows, mouth) moves together: shaking, nodding, or sliding away when turning.
     // Anything drawn past the body's edge while turning is hidden by fading it out.
@@ -286,7 +355,8 @@ private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift:
     // Eyes.
     val eyeY = cy - r * 0.12f + fy
     val eyeR = r * 0.13f
-    val eyeH = max(eyeR * 2 * face.eyeOpen * blink, stroke)
+    // A nod closes the eyes on the way down: a slow, deliberate blink.
+    val eyeH = max(eyeR * 2 * face.eyeOpen * blink * (1f - pose.nod), stroke)
     for (side in listOf(-1f, 1f)) {
         val x = fx + side * r * 0.38f
         drawOval(White, Offset(x - eyeR, eyeY - eyeH / 2), Size(eyeR * 2, eyeH), alpha = fa)
@@ -300,7 +370,7 @@ private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift:
         val browAlpha = if (side < 0) face.brows * face.leftBrow else face.brows
         if (browAlpha > 0f) {
             val lift = if (side > 0) face.rightBrowLift * eyeR * 0.9f else 0f
-            val baseY = eyeY - eyeR * 2.3f - lift
+            val baseY = eyeY - eyeR * 2.3f - lift + face.browDrop * eyeR
             val innerX = x - side * eyeR * 1.1f
             val outerX = x + side * eyeR * 1.1f
             drawLine(
@@ -314,7 +384,7 @@ private fun DrawScope.drawMascot(face: Face, breath: Float, blink: Float, drift:
 
     // Mouth: a curve that fades into an open "O" as mouthOpen grows.
     val mouthY = cy + r * 0.32f + fy
-    val mouthW = r * 0.3f
+    val mouthW = r * 0.3f * face.mouthWidth
     val openness = min(1f, face.mouthOpen * 4f)
     if (openness < 1f) {
         val mouth = Path().apply {
