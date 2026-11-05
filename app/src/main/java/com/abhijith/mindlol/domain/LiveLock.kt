@@ -75,13 +75,17 @@ object LiveLockDecider {
             .maxByOrNull { it.endsAtMillis }
 
         val lockedTonight = night != null && packageName in night.lockedApps
-        val insideNight = night != null && nowMillis >= night.startMillis && nowMillis < night.endMillis
         val limitMs = today?.limits?.get(packageName)?.let { it * MINUTE_MS }
         val insideToday = today != null && nowMillis >= today.startMillis && nowMillis < today.endMillis
 
         if (grant == null) {
-            if (lockedTonight && insideNight) return LockDecision.Lock(LockReason.BEDTIME, night!!.date)
-            if (limitMs != null && insideToday && usedTodayMs > limitMs) return LockDecision.Lock(LockReason.LIMIT, today!!.date)
+            // `night != null` inside the condition smart-casts it, so night.date needs no "!!".
+            if (night != null && lockedTonight && nowMillis >= night.startMillis && nowMillis < night.endMillis) {
+                return LockDecision.Lock(LockReason.BEDTIME, night.date)
+            }
+            if (today != null && insideToday && limitMs != null && usedTodayMs > limitMs) {
+                return LockDecision.Lock(LockReason.LIMIT, today.date)
+            }
         }
 
         // Allowed: when could that change while the app stays open?
