@@ -159,7 +159,7 @@ class CheatRepository(
             val since = prefs.rulesSinceMillis
             if (since != null) {
                 val (cheats, periods) = dao.deletePreRulesData(since)
-                Log.i(TAG, "Pre-rules cleanup: deleted $cheats cheats and $periods snapshots that started before $since")
+                Log.w(TAG, "Pre-rules cleanup: deleted $cheats cheats and $periods snapshots that started before $since")
             }
             prefs.preRulesCleanupDone = true
         }

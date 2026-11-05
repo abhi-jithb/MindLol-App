@@ -65,4 +65,14 @@ dependencies {
     androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+
+    // Constraints only pick a version; they never add a library by themselves.
+    // room-testing 2.8.5 (MigrationTest) is built against kotlinx-serialization 1.8.1, but other
+    // libraries pull in 1.7.3, and the test APK must use the app's version. Lifting the app to
+    // 1.8.1 fixes MigrationTest's AbstractMethodError in FieldBundle$$serializer.
+    constraints {
+        implementation(libs.kotlinx.serialization.core) {
+            because("room-testing 2.8.5 needs kotlinx-serialization 1.8.1 at runtime")
+        }
+    }
 }
