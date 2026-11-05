@@ -1,6 +1,7 @@
 package com.abhijith.mindlol
 
 import android.content.Context
+import android.util.Log
 import com.abhijith.mindlol.data.db.MindLolDatabase
 import com.abhijith.mindlol.data.prefs.AppPrefs
 import com.abhijith.mindlol.data.repository.UsageRepository
@@ -8,6 +9,7 @@ import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.data.usage.HistoryImporter
 import com.abhijith.mindlol.data.usage.UsageEventsReader
 import com.abhijith.mindlol.data.usage.UsagePermission
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,8 +27,15 @@ class AppContainer(context: Context) {
     // `by lazy`: built on first use, not at app start, so launch stays fast.
     val database: MindLolDatabase by lazy { MindLolDatabase.build(appContext) }
 
-    /** Coroutines that should outlive any single screen (sync, import). SupervisorJob: one failure doesn't cancel the rest. */
-    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /**
+     * Coroutines that should outlive any single screen (sync, import). SupervisorJob: one failure doesn't cancel the rest.
+     * The exception handler is a last safety net: anything a launched job forgets to catch is logged, not crashed on.
+     */
+    val applicationScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
+            Log.e("AppContainer", "Uncaught error in applicationScope", e)
+        }
+    )
 
     val prefs = AppPrefs(appContext)
     val usageReader = UsageEventsReader(appContext)
