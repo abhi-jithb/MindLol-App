@@ -36,6 +36,33 @@ object InterrogationCards {
             )
         ),
         InterrogationCard(
+            id = "video",
+            question = "Is this video going to change your life?",
+            personal = false,
+            answers = listOf(
+                CardAnswer("Yes", CardReaction.HEAD_SHAKE, "It's the 40th one tonight. None of them did."),
+                CardAnswer("No", CardReaction.STARE, "Then close it.")
+            )
+        ),
+        InterrogationCard(
+            id = "reel",
+            question = "Will you remember this reel tomorrow?",
+            personal = false,
+            answers = listOf(
+                CardAnswer("Yes", CardReaction.STARE, "Name the last one you watched. Exactly."),
+                CardAnswer("No", CardReaction.FACEPALM, "So you're trading sleep for nothing.")
+            )
+        ),
+        InterrogationCard(
+            id = "mom",
+            question = "Would you show your screen time to your mom right now?",
+            personal = false,
+            answers = listOf(
+                CardAnswer("Yes", CardReaction.TURN_AWAY, "Bold lie."),
+                CardAnswer("No", CardReaction.NOD, "That's your answer, then.")
+            )
+        ),
+        InterrogationCard(
             id = "girlfriend",
             question = "Do you have a girlfriend?",
             personal = true,

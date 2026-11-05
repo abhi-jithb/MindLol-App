@@ -11,9 +11,9 @@ class InterrogationCardsTest {
     private val cards = InterrogationCards.cards
 
     @Test
-    fun theFourCards_asWritten() {
-        assertEquals(listOf("brain", "girlfriend", "exes", "loyal"), cards.map { it.id })
-        assertEquals(listOf(false, true, true, true), cards.map { it.personal })
+    fun theSevenCards_asWritten() {
+        assertEquals(listOf("brain", "video", "reel", "mom", "girlfriend", "exes", "loyal"), cards.map { it.id })
+        assertEquals(listOf(false, false, false, false, true, true, true), cards.map { it.personal })
         cards.forEach { assertEquals(2, it.answers.size) }
         assertEquals(cards.size, cards.map { it.id }.toSet().size) // ids are unique
     }
@@ -29,6 +29,26 @@ class InterrogationCardsTest {
         assertEquals(CardReaction.HEAD_SHAKE, reaction("exes", "1+"))
         assertEquals(CardReaction.TURN_AWAY, reaction("loyal", "Yes"))
         assertEquals(CardReaction.NOD, reaction("loyal", "No"))
+        assertEquals(CardReaction.HEAD_SHAKE, reaction("video", "Yes"))
+        assertEquals(CardReaction.STARE, reaction("video", "No"))
+        assertEquals(CardReaction.STARE, reaction("reel", "Yes"))
+        assertEquals(CardReaction.FACEPALM, reaction("reel", "No"))
+        assertEquals(CardReaction.TURN_AWAY, reaction("mom", "Yes"))
+        assertEquals(CardReaction.NOD, reaction("mom", "No"))
+    }
+
+    @Test
+    fun newCards_wordForWord() {
+        fun card(id: String) = cards.single { it.id == id }
+        assertEquals("Is this video going to change your life?", card("video").question)
+        assertEquals("It's the 40th one tonight. None of them did.", card("video").answers[0].reply)
+        assertEquals("Then close it.", card("video").answers[1].reply)
+        assertEquals("Will you remember this reel tomorrow?", card("reel").question)
+        assertEquals("Name the last one you watched. Exactly.", card("reel").answers[0].reply)
+        assertEquals("So you're trading sleep for nothing.", card("reel").answers[1].reply)
+        assertEquals("Would you show your screen time to your mom right now?", card("mom").question)
+        assertEquals("Bold lie.", card("mom").answers[0].reply)
+        assertEquals("That's your answer, then.", card("mom").answers[1].reply)
     }
 
     @Test
@@ -40,9 +60,10 @@ class InterrogationCardsTest {
 
     @Test
     fun personalCards_onlyWithPersonalIntensity() {
+        val personalIds = cards.filter { it.personal }.map { it.id }.toSet()
         (0L..50L).forEach { seed ->
-            assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, emptyList(), seed)?.id)
-            assertEquals("brain", InterrogationCards.pick(RoastIntensity.MILD, emptyList(), seed)?.id)
+            assertTrue(InterrogationCards.pick(RoastIntensity.SAVAGE, emptyList(), seed)?.id !in personalIds)
+            assertTrue(InterrogationCards.pick(RoastIntensity.MILD, emptyList(), seed)?.id !in personalIds)
         }
         val personal = (0L..50L).mapNotNull { InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), it)?.id }.toSet()
         assertTrue(personal.size > 1) // personal cards do show up
@@ -50,17 +71,17 @@ class InterrogationCardsTest {
 
     @Test
     fun noRepeatSameNight() {
-        val shown = listOf("brain", "girlfriend", "exes")
+        val shown = listOf("brain", "video", "reel", "mom", "girlfriend", "exes")
         (0L..50L).forEach { assertEquals("loyal", InterrogationCards.pick(RoastIntensity.PERSONAL, shown, it)?.id) }
     }
 
     @Test
     fun everyCardShownTonight_repeatsTheOneShownLongestAgo_neverSkips() {
-        // SAVAGE has one allowed card: it keeps coming back.
-        assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("brain"), 1L)?.id)
-        assertEquals("brain", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("brain", "brain", "brain"), 7L)?.id)
-        // PERSONAL, all four shown (exes twice): brain's last showing is the oldest.
-        val shown = listOf("exes", "brain", "girlfriend", "loyal", "exes")
+        // SAVAGE, all four non-personal cards shown: the oldest comes back.
+        assertEquals("video", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("video", "brain", "reel", "mom"), 1L)?.id)
+        assertEquals("reel", InterrogationCards.pick(RoastIntensity.SAVAGE, listOf("video", "brain", "reel", "mom", "video", "brain"), 7L)?.id)
+        // PERSONAL, all seven shown (exes twice): brain's last showing is the oldest.
+        val shown = listOf("exes", "brain", "video", "reel", "mom", "girlfriend", "loyal", "exes")
         (0L..20L).forEach { assertEquals("brain", InterrogationCards.pick(RoastIntensity.PERSONAL, shown, it)?.id) }
     }
 
