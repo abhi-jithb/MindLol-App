@@ -1,5 +1,8 @@
 package com.abhijith.mindlol.ui.screens.settings
 
+import android.content.Context
+import android.os.Build
+import android.os.PowerManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,10 +41,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.abhijith.mindlol.data.repository.FakeData
 import com.abhijith.mindlol.domain.AppRule
 import com.abhijith.mindlol.domain.PermissionInfo
@@ -62,7 +68,11 @@ private enum class EditingTime { WAKE, BED }
  * The usage access row is real and opens system Settings when tapped.
  */
 @Composable
-fun SettingsScreen(usageAccessGranted: Boolean, onOpenUsageSettings: () -> Unit) {
+fun SettingsScreen(
+    usageAccessGranted: Boolean,
+    onOpenUsageSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
     val initial = FakeData.settings
     var wake by rememberSaveable { mutableStateOf(initial.wakeTime) }
     var bed by rememberSaveable { mutableStateOf(initial.bedTime) }
@@ -105,7 +115,10 @@ fun SettingsScreen(usageAccessGranted: Boolean, onOpenUsageSettings: () -> Unit)
         )
         initial.permissions.forEach { PermissionRow(it) }
 
-        SectionLabel("THEME", Modifier.revealOnEnter(9))
+        SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
+        BackgroundLimitsSection(onOpenAppSettings)
+
+        SectionLabel("THEME", Modifier.revealOnEnter(10))
         initial.themeOptions.forEachIndexed { i, name ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -247,6 +260,53 @@ private fun PermissionRow(permission: PermissionInfo, onClick: (() -> Unit)? = n
     }
 }
 
+/**
+ * Vivo (OriginOS) and some other brands stop apps in the background to save battery, which
+ * would pause the 6-hour sync. This explains how to allow it; nothing is changed automatically.
+ */
+@Composable
+private fun BackgroundLimitsSection(onOpenAppSettings: () -> Unit) {
+    val context = LocalContext.current
+    var unrestricted by remember { mutableStateOf(isBatteryUnrestricted(context)) }
+    // Re-read when you come back from system Settings.
+    LifecycleResumeEffect(Unit) {
+        unrestricted = isBatteryUnrestricted(context)
+        onPauseOrDispose { }
+    }
+    val isVivo = Build.MANUFACTURER.equals("vivo", ignoreCase = true)
+
+    PermissionRow(
+        PermissionInfo(
+            name = "Battery",
+            reason = "Unrestricted keeps the background sync running",
+            status = if (unrestricted) "Unrestricted" else "Optimized"
+        )
+    )
+    Text(
+        text = if (isVivo) {
+            "On Vivo, allow both:\n" +
+                "1. Auto-start: Settings → Apps → Autostart → MindLol on.\n" +
+                "2. Battery: App info → Battery → Allow background activity / high background power use.\n" +
+                "Menu names vary a little between OriginOS versions."
+        } else {
+            "If your phone limits background apps, set MindLol's battery use to Unrestricted in App info."
+        },
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 8.dp)
+    )
+    OutlinedButton(
+        onClick = onOpenAppSettings,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    ) {
+        Text("Open MindLol's app settings")
+    }
+}
+
+/** Read-only check: is MindLol exempt from battery optimization? */
+private fun isBatteryUnrestricted(context: Context): Boolean =
+    context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true
+
 // TimePicker is still marked experimental in Material 3, so we opt in explicitly.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -278,5 +338,5 @@ private fun TimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfir
 @Preview(heightDp = 1400)
 @Composable
 private fun SettingsScreenPreview() {
-    MindLolTheme { SettingsScreen(usageAccessGranted = false, onOpenUsageSettings = {}) }
+    MindLolTheme { SettingsScreen(usageAccessGranted = false, onOpenUsageSettings = {}, onOpenAppSettings = {}) }
 }

@@ -1,6 +1,9 @@
 package com.abhijith.mindlol
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 
 import androidx.activity.enableEdgeToEdge
@@ -32,7 +35,12 @@ class MainActivity : ComponentActivity() {
                 val granted by container.usagePermission.granted.collectAsState()
                 MindLolApp(
                     usageAccessGranted = granted,
-                    onOpenUsageSettings = { UsagePermission.openSettings(this) }
+                    onOpenUsageSettings = { UsagePermission.openSettings(this) },
+                    onOpenAppSettings = {
+                        startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+                        )
+                    }
                 )
             }
         }

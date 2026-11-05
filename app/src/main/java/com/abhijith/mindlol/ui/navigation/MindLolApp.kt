@@ -38,10 +38,15 @@ private const val USAGE_ACCESS_ROUTE = "usage-access"
 /**
  * Root of the UI.
  * [usageAccessGranted] is the live permission state; while it is false the tabs are
- * replaced by the usage-access screen. [onOpenUsageSettings] opens system Settings.
+ * replaced by the usage-access screen. [onOpenUsageSettings] opens system Settings,
+ * [onOpenAppSettings] opens MindLol's own App info page.
  */
 @Composable
-fun MindLolApp(usageAccessGranted: Boolean, onOpenUsageSettings: () -> Unit) {
+fun MindLolApp(
+    usageAccessGranted: Boolean,
+    onOpenUsageSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -131,7 +136,11 @@ fun MindLolApp(usageAccessGranted: Boolean, onOpenUsageSettings: () -> Unit) {
             composable(Destination.CHEATLOG.route) { CheatLogScreen() }
             composable(Destination.PROFILE.route) { ProfileScreen() }
             composable(Destination.SETTINGS.route) {
-                SettingsScreen(usageAccessGranted = usageAccessGranted, onOpenUsageSettings = onOpenUsageSettings)
+                SettingsScreen(
+                    usageAccessGranted = usageAccessGranted,
+                    onOpenUsageSettings = onOpenUsageSettings,
+                    onOpenAppSettings = onOpenAppSettings
+                )
             }
         }
     }
