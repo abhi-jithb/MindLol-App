@@ -95,6 +95,9 @@ object FakeData {
 
     // ---------- Home ----------
 
+    // Fake "current time". Used to pick the mascot's mood (SLEEPY near bedtime).
+    val now: LocalTime = LocalTime.of(14, 32)
+
     val today = TodaySummary(
         totalMinutes = day.totalMinutes,
         reelsCount = 87,
