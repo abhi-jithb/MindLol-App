@@ -133,7 +133,7 @@ object RulesPlanner {
                 cheat
             } else {
                 match.copy(
-                    startMillis = if (cheat.type == CheatType.BEDTIME) minOf(match.startMillis, cheat.startMillis) else match.startMillis,
+                    startMillis = if (cheat.type != CheatType.LIMIT) minOf(match.startMillis, cheat.startMillis) else match.startMillis,
                     endMillis = maxOf(match.endMillis, cheat.endMillis),
                     minutes = maxOf(match.minutes, cheat.minutes)
                 )
@@ -147,7 +147,9 @@ object RulesPlanner {
     private fun Cheat.isSameCheatAs(other: Cheat): Boolean =
         packageName == other.packageName && type == other.type && periodDate == other.periodDate && when (type) {
             CheatType.LIMIT -> true
-            CheatType.BEDTIME -> CheatDetector.isClose(startMillis, endMillis, other.startMillis, other.endMillis)
+            // Time-based cheats: the same one if they overlap or are within the merge gap.
+            CheatType.BEDTIME, CheatType.LOCK_DISABLED ->
+                CheatDetector.isClose(startMillis, endMillis, other.startMillis, other.endMillis)
         }
 
     private fun typeOf(kind: PeriodKind) = when (kind) {

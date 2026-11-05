@@ -18,8 +18,11 @@ data class AppSession(
  */
 enum class PeriodKind { NIGHT, DAY }
 
-/** BEDTIME: a locked app used inside the sleep window. LIMIT: an app used past its daily limit. */
-enum class CheatType { BEDTIME, LIMIT }
+/**
+ * BEDTIME: a locked app used inside the sleep window. LIMIT: an app used past its daily limit.
+ * LOCK_DISABLED: the live lock was turned off (or MindLol force-stopped) during a sleep window.
+ */
+enum class CheatType { BEDTIME, LIMIT, LOCK_DISABLED }
 
 /**
  * The rules frozen for one night or day. Once [startMillis] has passed, the row never changes
@@ -49,8 +52,8 @@ data class RulesSnapshot(
  * Identity (what makes two cheats "the same one"), see [key]:
  * - LIMIT: one per app per day, so (package, LIMIT, day). [startMillis] is when the limit was
  *   crossed, stored as data only.
- * - BEDTIME: (package, BEDTIME, night, [firstSeenStartMillis]). The first-seen start never changes,
- *   even if a later refresh finds the cheat really began earlier and [startMillis] moves back.
+ * - BEDTIME and LOCK_DISABLED: (package, type, night, [firstSeenStartMillis]). The first-seen start
+ *   never changes, even if a later refresh finds the cheat really began earlier and [startMillis] moves back.
  */
 data class Cheat(
     val packageName: String,
@@ -58,7 +61,7 @@ data class Cheat(
     val periodDate: LocalDate,
     val startMillis: Long,
     val endMillis: Long,
-    /** BEDTIME: minutes inside the window. LIMIT: minutes over the limit. Rounded up, at least 1. */
+    /** BEDTIME: minutes inside the window. LIMIT: minutes over the limit. LOCK_DISABLED: minutes the lock was off. Rounded up, at least 1. */
     val minutes: Int,
     /** BEDTIME: the start when this cheat was first saved. LIMIT: always [NO_FIRST_SEEN]. */
     val firstSeenStartMillis: Long = if (type == CheatType.LIMIT) NO_FIRST_SEEN else startMillis
