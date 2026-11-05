@@ -79,7 +79,7 @@ object LiveLockDecider {
         val insideToday = today != null && nowMillis >= today.startMillis && nowMillis < today.endMillis
 
         if (grant == null) {
-            // `night != null` inside the condition smart-casts it, so night.date needs no "!!".
+            // `night != null` inside the condition smart-casts it, so night.date is safe to use here.
             if (night != null && lockedTonight && nowMillis >= night.startMillis && nowMillis < night.endMillis) {
                 return LockDecision.Lock(LockReason.BEDTIME, night.date)
             }
