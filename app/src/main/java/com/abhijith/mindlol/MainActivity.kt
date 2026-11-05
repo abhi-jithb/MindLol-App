@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.abhijith.mindlol.data.usage.UsagePermission
 import com.abhijith.mindlol.ui.theme.MindLolTheme
+import kotlinx.coroutines.launch
 
 import com.abhijith.mindlol.ui.navigation.MindLolApp
 
@@ -41,6 +42,11 @@ class MainActivity : ComponentActivity() {
     // system Settings, so a freshly granted (or revoked) usage access shows up at once.
     override fun onResume() {
         super.onResume()
-        (application as MindLolApplication).container.usagePermission.refresh()
+        val container = (application as MindLolApplication).container
+        container.usagePermission.refresh()
+        // One-time import of older history. Moves into the repository's refresh in the next step.
+        if (container.usagePermission.granted.value) {
+            container.applicationScope.launch { container.historyImporter.importOnce() }
+        }
     }
 }
