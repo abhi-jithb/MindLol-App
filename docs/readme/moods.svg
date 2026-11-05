@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" role="img" aria-label="The mascot's four moods: neutral, sleepy, smug, dramatic">
+  <title>Mascot moods: neutral, sleepy, smug, dramatic</title>
+  <defs>
+    <radialGradient id="g1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></radialGradient>
+    <radialGradient id="g2"><stop offset="0" stop-color="#818cf8"/><stop offset="1" stop-color="#818cf8" stop-opacity="0"/></radialGradient>
+    <radialGradient id="g3"><stop offset="0" stop-color="#f472b6"/><stop offset="1" stop-color="#f472b6" stop-opacity="0"/></radialGradient>
+    <radialGradient id="g4"><stop offset="0" stop-color="#fb923c"/><stop offset="1" stop-color="#fb923c" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="960" height="300" rx="24" fill="#0b0b0f"/>
+
+  <g font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="600" letter-spacing="3" text-anchor="middle">
+    <text x="120" y="268" fill="#22d3ee">NEUTRAL</text>
+    <text x="360" y="268" fill="#818cf8">SLEEPY</text>
+    <text x="600" y="268" fill="#f472b6">SMUG</text>
+    <text x="840" y="268" fill="#fb923c">DRAMATIC</text>
+  </g>
+
+  <!-- NEUTRAL: calm, blinks -->
+  <g transform="translate(120 140)">
+    <circle r="95" fill="url(#g1)" opacity="0.45">
+      <animate attributeName="r" values="88;100;88" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <g stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none">
+      <animateTransform attributeName="transform" type="translate" values="0 0;0 -5;0 0" dur="3s" repeatCount="indefinite"/>
+      <circle r="60" fill="#000"/>
+      <path d="M-3,-60 Q18,-78 3,-85"/>
+      <ellipse cx="-22.8" cy="-7.2" rx="7.8" ry="7.8" fill="#fff" stroke="none">
+        <animate attributeName="ry" values="7.8;7.8;0.8;7.8" keyTimes="0;0.92;0.95;1" dur="3.6s" repeatCount="indefinite"/>
+      </ellipse>
+      <ellipse cx="22.8" cy="-7.2" rx="7.8" ry="7.8" fill="#fff" stroke="none">
+        <animate attributeName="ry" values="7.8;7.8;0.8;7.8" keyTimes="0;0.92;0.95;1" dur="3.6s" repeatCount="indefinite"/>
+      </ellipse>
+      <path d="M-18,19.2 Q0,24.6 18,19.2"/>
+    </g>
+  </g>
+
+  <!-- SLEEPY: closed eyes, tiny "o", floating Z's -->
+  <g transform="translate(360 140)">
+    <circle r="95" fill="url(#g2)" opacity="0.45">
+      <animate attributeName="r" values="88;100;88" dur="5s" repeatCount="indefinite"/>
+    </circle>
+    <g stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none">
+      <animateTransform attributeName="transform" type="translate" values="0 0;0 4;0 0" dur="4.5s" repeatCount="indefinite"/>
+      <circle r="60" fill="#000"/>
+      <path d="M-3,-60 Q18,-78 3,-85"/>
+      <path d="M-30.6,-7.2 H-15 M15,-7.2 H30.6"/>
+      <ellipse cx="0" cy="22.2" rx="3.8" ry="4.8">
+        <animate attributeName="ry" values="4.8;6;4.8" dur="4.5s" repeatCount="indefinite"/>
+      </ellipse>
+    </g>
+    <g stroke="#c7d2fe" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M51,-54 h8.4 l-8.4,8.4 h8.4">
+        <animateTransform attributeName="transform" type="translate" values="0 6;6 -14" dur="2.4s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2.4s" repeatCount="indefinite"/>
+      </path>
+      <path d="M66,-75 h12 l-12,12 h12">
+        <animateTransform attributeName="transform" type="translate" values="0 6;8 -16" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;1;0" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </g>
+
+  <!-- SMUG: half-lidded, raised brow, smirk -->
+  <g transform="translate(600 140)">
+    <circle r="95" fill="url(#g3)" opacity="0.45">
+      <animate attributeName="r" values="88;100;88" dur="3.6s" repeatCount="indefinite"/>
+    </circle>
+    <g stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none">
+      <animateTransform attributeName="transform" type="rotate" values="0;-4;0;0" keyTimes="0;0.15;0.3;1" dur="3.6s" repeatCount="indefinite"/>
+      <circle r="60" fill="#000"/>
+      <path d="M-3,-60 Q18,-78 3,-85"/>
+      <ellipse cx="-22.8" cy="-7.2" rx="7.8" ry="4.7" fill="#fff" stroke="none"/>
+      <ellipse cx="22.8" cy="-7.2" rx="7.8" ry="4.7" fill="#fff" stroke="none"/>
+      <path d="M-32.9,-11.9 H-12.7 M12.7,-11.9 H32.9"/>
+      <path d="M14.2,-32 H31.4">
+        <animateTransform attributeName="transform" type="translate" values="0 0;0 -5;0 0;0 0" keyTimes="0;0.1;0.2;1" dur="2.6s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-18,19.2 Q0,27.3 18,10.6"/>
+    </g>
+  </g>
+
+  <!-- DRAMATIC: wide eyes, worried brows, open mouth, sweat drop -->
+  <g transform="translate(840 140)">
+    <circle r="95" fill="url(#g4)" opacity="0.45">
+      <animate attributeName="r" values="86;104;86" dur="1.6s" repeatCount="indefinite"/>
+    </circle>
+    <g stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none">
+      <animateTransform attributeName="transform" type="translate" values="0 0;-1.5 0;1.5 0;0 0" dur="0.35s" repeatCount="indefinite"/>
+      <circle r="60" fill="#000"/>
+      <path d="M-3,-60 Q18,-78 3,-85"/>
+      <ellipse cx="-22.8" cy="-7.2" rx="7.8" ry="11.7" fill="#fff" stroke="none"/>
+      <ellipse cx="22.8" cy="-7.2" rx="7.8" ry="11.7" fill="#fff" stroke="none"/>
+      <circle cx="-22.8" cy="-7.2" r="3.5" fill="#000" stroke="none">
+        <animate attributeName="r" values="3.5;2.2;3.5" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="22.8" cy="-7.2" r="3.5" fill="#000" stroke="none">
+        <animate attributeName="r" values="3.5;2.2;3.5" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <path d="M-14.2,-30.6 L-31.4,-22 M14.2,-30.6 L31.4,-22"/>
+      <ellipse cx="0" cy="22.2" rx="9.6" ry="12">
+        <animate attributeName="ry" values="12;14;12" dur="1.6s" repeatCount="indefinite"/>
+      </ellipse>
+    </g>
+    <path d="M60,-55.2 Q67.6,-43.4 60,-40.1 Q52.4,-43.4 60,-55.2" stroke="#7dd3fc" stroke-width="3.2" fill="#7dd3fc" fill-opacity="0.3">
+      <animateTransform attributeName="transform" type="translate" values="0 0;2 22" dur="1.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.7;1" dur="1.6s" repeatCount="indefinite"/>
+    </path>
+  </g>
+</svg>

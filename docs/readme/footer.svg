@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="140" viewBox="0 0 1280 140" role="img" aria-label="MindLol footer">
+  <title>Screen time, roasted</title>
+  <defs>
+    <linearGradient id="w" x1="0" x2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="0.5" stop-color="#db2777"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#w)" opacity="0.55">
+    <animate attributeName="d" dur="9s" repeatCount="indefinite"
+      values="M0,70 C240,20 400,120 640,70 C880,20 1040,120 1280,70 V140 H0Z;
+              M0,70 C240,120 400,20 640,70 C880,120 1040,20 1280,70 V140 H0Z;
+              M0,70 C240,20 400,120 640,70 C880,20 1040,120 1280,70 V140 H0Z"/>
+  </path>
+  <path fill="url(#w)">
+    <animate attributeName="d" dur="6s" repeatCount="indefinite"
+      values="M0,95 C320,60 480,130 800,95 C1000,72 1140,118 1280,95 V140 H0Z;
+              M0,95 C320,130 480,60 800,95 C1000,118 1140,72 1280,95 V140 H0Z;
+              M0,95 C320,60 480,130 800,95 C1000,72 1140,118 1280,95 V140 H0Z"/>
+  </path>
+</svg>

@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-label="MindLol: screen time, roasted">
+  <title>MindLol: screen time, roasted</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c3aed">
+        <animate attributeName="stop-color" values="#7c3aed;#db2777;#f97316;#7c3aed" dur="14s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="0.55" stop-color="#db2777">
+        <animate attributeName="stop-color" values="#db2777;#f97316;#0ea5e9;#db2777" dur="14s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="1" stop-color="#0ea5e9">
+        <animate attributeName="stop-color" values="#0ea5e9;#7c3aed;#db2777;#0ea5e9" dur="14s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="45"/></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+    <clipPath id="card"><rect width="1280" height="400" rx="28"/></clipPath>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.6" fill="#fff" opacity="0.18"/>
+    </pattern>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1280" height="400" fill="url(#bg)"/>
+    <rect width="1280" height="400" fill="url(#dots)"/>
+    <!-- drifting light blobs -->
+    <circle cx="180" cy="80" r="140" fill="#fff" opacity="0.22" filter="url(#blur)">
+      <animateTransform attributeName="transform" type="translate" values="0 0;120 60;0 0" dur="16s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1100" cy="330" r="170" fill="#fbbf24" opacity="0.2" filter="url(#blur)">
+      <animateTransform attributeName="transform" type="translate" values="0 0;-160 -40;0 0" dur="18s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="760" cy="40" r="120" fill="#22d3ee" opacity="0.25" filter="url(#blur)">
+      <animateTransform attributeName="transform" type="translate" values="0 0;-80 90;0 0" dur="20s" repeatCount="indefinite"/>
+    </circle>
+    <!-- soft dark band behind the text for contrast -->
+    <rect x="0" y="0" width="1280" height="400" fill="#000" opacity="0.12"/>
+  </g>
+
+  <!-- mascot (smug), same shapes as the app's Canvas drawing -->
+  <g transform="translate(245 215)">
+    <circle r="120" fill="#000" opacity="0.35" filter="url(#glow)"/>
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0 0;0 -8;0 0" dur="3s" repeatCount="indefinite"/>
+      <g transform="scale(1.6)" stroke="#fff" stroke-width="4" stroke-linecap="round" fill="none">
+        <circle r="60" fill="#000"/>
+        <path d="M-3,-60 Q18,-78 3,-85"/>
+        <!-- eyes: half-lidded, with a blink -->
+        <ellipse cx="-22.8" cy="-7.2" rx="7.8" ry="4.7" fill="#fff" stroke="none">
+          <animate attributeName="ry" values="4.7;4.7;0.8;4.7" keyTimes="0;0.92;0.95;1" dur="4.2s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="22.8" cy="-7.2" rx="7.8" ry="4.7" fill="#fff" stroke="none">
+          <animate attributeName="ry" values="4.7;4.7;0.8;4.7" keyTimes="0;0.92;0.95;1" dur="4.2s" repeatCount="indefinite"/>
+        </ellipse>
+        <path d="M-32.9,-11.9 H-12.7 M12.7,-11.9 H32.9"/>
+        <!-- one raised eyebrow, bobbing -->
+        <path d="M14.2,-32 H31.4">
+          <animateTransform attributeName="transform" type="translate" values="0 0;0 -4;0 0;0 0" keyTimes="0;0.1;0.2;1" dur="3.5s" repeatCount="indefinite"/>
+        </path>
+        <path d="M-18,19.2 Q0,27.3 18,10.6"/>
+      </g>
+    </g>
+    <!-- sparkles -->
+    <g fill="#fff">
+      <path d="M150,-110 l6,16 16,6 -16,6 -6,16 -6,-16 -16,-6 16,-6z">
+        <animate attributeName="opacity" values="0;1;0" dur="2.2s" repeatCount="indefinite"/>
+      </path>
+      <path d="M-150,90 l4,11 11,4 -11,4 -4,11 -4,-11 -11,-4 11,-4z">
+        <animate attributeName="opacity" values="0;1;0" dur="2.8s" begin="0.9s" repeatCount="indefinite"/>
+      </path>
+      <path d="M130,120 l3,8 8,3 -8,3 -3,8 -3,-8 -8,-3 8,-3z">
+        <animate attributeName="opacity" values="0;1;0" dur="1.9s" begin="0.4s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </g>
+
+  <g font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" fill="#fff">
+    <text x="455" y="185" font-size="112" font-weight="300" letter-spacing="-3">MindLol
+      <animate attributeName="opacity" values="0;1" dur="1s" fill="freeze"/>
+    </text>
+    <text x="462" y="232" font-size="22" font-weight="600" letter-spacing="7">SCREEN TIME, ROASTED.
+      <animate attributeName="opacity" values="0;0;1" keyTimes="0;0.4;1" dur="1.6s" fill="freeze"/>
+    </text>
+
+    <!-- rotating roast lines -->
+    <g font-size="25" font-style="italic" opacity="0.95">
+      <text x="462" y="292">“Bedtime was 11. Instagram disagreed.”
+        <animate attributeName="opacity" values="1;1;0;0;1" keyTimes="0;0.29;0.33;0.96;1" dur="12s" repeatCount="indefinite"/>
+      </text>
+      <text x="462" y="292" opacity="0">“412 reels ≈ one movie you didn’t watch.”
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.04;0.29;0.33;1" dur="12s" begin="4s" repeatCount="indefinite"/>
+      </text>
+      <text x="462" y="292" opacity="0">“3rd time this week you outsmarted yourself at 1:40 AM.”
+        <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.04;0.29;0.33;1" dur="12s" begin="8s" repeatCount="indefinite"/>
+      </text>
+    </g>
+
+    <!-- chips -->
+    <g font-size="15" font-weight="600" letter-spacing="1">
+      <animate attributeName="opacity" values="0;0;1" keyTimes="0;0.55;1" dur="2.2s" fill="freeze"/>
+      <rect x="462" y="326" width="96" height="32" rx="16" fill="#000" opacity="0.28"/>
+      <text x="510" y="347" text-anchor="middle">KOTLIN</text>
+      <rect x="568" y="326" width="122" height="32" rx="16" fill="#000" opacity="0.28"/>
+      <text x="629" y="347" text-anchor="middle">COMPOSE</text>
+      <rect x="700" y="326" width="96" height="32" rx="16" fill="#000" opacity="0.28"/>
+      <text x="748" y="347" text-anchor="middle">ROOM</text>
+      <rect x="806" y="326" width="160" height="32" rx="16" fill="#000" opacity="0.28"/>
+      <text x="886" y="347" text-anchor="middle">100% ON-DEVICE</text>
+    </g>
+  </g>
+</svg>
