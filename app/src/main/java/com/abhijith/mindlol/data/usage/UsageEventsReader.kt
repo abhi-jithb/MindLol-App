@@ -85,6 +85,9 @@ class UsageEventsReader(private val context: Context) {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         return context.packageManager
             .queryIntentActivities(home, PackageManager.MATCH_DEFAULT_ONLY)
+            // Settings registers a "FallbackHome" that only shows while the phone boots.
+            // It isn't a real launcher, so time in Settings must still count.
+            .filterNot { it.activityInfo.name.endsWith("FallbackHome") }
             .map { it.activityInfo.packageName }
             .toSet()
     }
