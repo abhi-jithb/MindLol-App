@@ -12,6 +12,7 @@ import com.abhijith.mindlol.domain.LockReason
 import com.abhijith.mindlol.domain.LockStep
 import com.abhijith.mindlol.domain.UnlockSteps
 import android.util.Log
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,7 +68,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         openedFor = key
         finished = false
         confession.edit { replace(0, length, "") }
-        viewModelScope.launch {
+        viewModelScope.launch(logErrors) {
             val info = repository.openLockScreen(packageName, reason, periodDate, test = test)
             _state.value = LockUiState(info = info, step = LockScreenStep.STARE, countdownLeft = info.countdownSeconds)
             // Debug screenshots only: a test lock (writes nothing) can open straight at a later step.
@@ -91,7 +92,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         val info = _state.value.info ?: return
         if (_state.value.countdownLeft > 0) return
         _state.update { it.copy(step = LockScreenStep.CONFESSION) }
-        viewModelScope.launch { repository.reachStep(info.eventId, LockStep.CONFESSION) }
+        viewModelScope.launch(logErrors) { repository.reachStep(info.eventId, LockStep.CONFESSION) }
     }
 
     fun confessionMatches(): Boolean {
@@ -110,7 +111,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
             return
         }
         _state.update { it.copy(step = LockScreenStep.INTERROGATION, answer = null, replyTyped = false) }
-        viewModelScope.launch { repository.showCard(info.eventId, card.id) }
+        viewModelScope.launch(logErrors) { repository.showCard(info.eventId, card.id) }
     }
 
     /** Step 3: one answer per card. The mascot reacts and the reply types out. */
@@ -120,7 +121,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         if (_state.value.step != LockScreenStep.INTERROGATION || _state.value.answer != null) return
         if (answer !in card.answers) return
         _state.update { it.copy(answer = answer, replyTyped = false) }
-        viewModelScope.launch { repository.answerCard(info.eventId, answer.label) }
+        viewModelScope.launch(logErrors) { repository.answerCard(info.eventId, answer.label) }
     }
 
     fun replyFinished() {
@@ -137,7 +138,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
     private fun toBargain() {
         val info = _state.value.info ?: return
         _state.update { it.copy(step = LockScreenStep.BARGAIN) }
-        viewModelScope.launch { repository.reachStep(info.eventId, LockStep.BARGAIN) }
+        viewModelScope.launch(logErrors) { repository.reachStep(info.eventId, LockStep.BARGAIN) }
     }
 
     /** Step 4 → 5: 2, 5 or 10 minutes. */
@@ -145,7 +146,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         val info = _state.value.info ?: return
         if (_state.value.step != LockScreenStep.BARGAIN || !UnlockSteps.isBargainOption(minutes)) return
         _state.update { it.copy(step = LockScreenStep.LAST_CHANCE, minutes = minutes) }
-        viewModelScope.launch { repository.reachStep(info.eventId, LockStep.LAST_CHANCE) }
+        viewModelScope.launch(logErrors) { repository.reachStep(info.eventId, LockStep.LAST_CHANCE) }
     }
 
     /**
@@ -161,7 +162,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         if (s.step != LockScreenStep.LAST_CHANCE || finished) return
         finished = true // from here, leaving can't overwrite UNLOCKED with LEFT
         openedFor = null
-        viewModelScope.launch {
+        viewModelScope.launch(logErrors) {
             val saved = repository.grant(info.eventId, minutes)
             Log.w(TAG, if (saved) "UNLOCKED ${info.packageName} for $minutes min" else "Unlock of ${info.packageName} not saved (test lock screen or already closed)")
             onUnlocked(info.packageName)
@@ -179,10 +180,17 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         if (finished) return
         finished = true
         openedFor = null
-        viewModelScope.launch { repository.endLockScreen(info.eventId, outcome) }
+        viewModelScope.launch(logErrors) { repository.endLockScreen(info.eventId, outcome) }
     }
 
     private companion object {
         const val TAG = "LiveLock"
+
+        /**
+         * The lock screen runs in the same process as the live lock service. A failed database
+         * write here is logged, never thrown: a crash would take the service down with it.
+         * If saving a grant fails, the lock simply stays closed (you can still go back).
+         */
+        val logErrors = CoroutineExceptionHandler { _, e -> Log.w(TAG, "Lock screen: background work failed", e) }
     }
 }

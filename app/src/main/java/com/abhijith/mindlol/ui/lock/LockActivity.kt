@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
@@ -80,7 +81,7 @@ class LockActivity : ComponentActivity() {
     /** Closes the lock and goes to the home screen. The locked app stays behind it, unused. */
     private fun goBackToSleep() {
         viewModel.goBack()
-        startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        safeStart(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         finish()
     }
 
@@ -90,8 +91,17 @@ class LockActivity : ComponentActivity() {
      */
     private fun openUnlockedApp(packageName: String) {
         if (isFinishing) return // already left (Home, screen off) while the grant was being saved
-        packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        packageManager.getLaunchIntentForPackage(packageName)?.let { safeStart(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         finish()
+    }
+
+    /** Starting another app can fail (uninstalled, disabled). Log it; never crash the shared process. */
+    private fun safeStart(intent: Intent) {
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.w("LiveLock", "Lock screen: couldn't start ${intent.`package` ?: intent.action}", e)
+        }
     }
 
     companion object {
