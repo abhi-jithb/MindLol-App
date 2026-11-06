@@ -12,6 +12,8 @@ import com.abhijith.mindlol.data.usage.SystemApps
 import com.abhijith.mindlol.data.usage.UsageEventsReader
 import com.abhijith.mindlol.domain.CheatType
 import com.abhijith.mindlol.domain.Confession
+import com.abhijith.mindlol.domain.InterrogationCard
+import com.abhijith.mindlol.domain.InterrogationCards
 import com.abhijith.mindlol.domain.LiveLockDecider
 import com.abhijith.mindlol.domain.LockOutcome
 import com.abhijith.mindlol.domain.LockReason
@@ -43,7 +45,11 @@ data class LockScreenInfo(
     val countdownSeconds: Int,
     val stareLine: String,
     val confessionLine: String,
-    val requiredConfession: String
+    val requiredConfession: String,
+    /** Step 3's card: not shown tonight yet, or the one shown longest ago. Null only if no card is allowed. */
+    val card: InterrogationCard?,
+    val bargainLine: String,
+    val lastChanceLine: String
 )
 
 class LiveLockRepository(
@@ -162,8 +168,24 @@ class LiveLockRepository(
             countdownSeconds = countdown,
             stareLine = RoastGenerator.stepLine(LockStep.STARE, context).orEmpty(),
             confessionLine = RoastGenerator.stepLine(LockStep.CONFESSION, context).orEmpty(),
-            requiredConfession = Confession.required(appName, reason)
+            requiredConfession = Confession.required(appName, reason),
+            // Reading which cards were shown is fine in a test lock screen; only writes are skipped.
+            card = InterrogationCards.pick(settings.roastIntensity, lockDao.cardsShown(periodDate, reason), seed = nowMillis),
+            bargainLine = RoastGenerator.stepLine(LockStep.BARGAIN, context).orEmpty(),
+            lastChanceLine = RoastGenerator.stepLine(LockStep.LAST_CHANCE, context).orEmpty()
         )
+    }
+
+    /** Step 3 reached: the card is saved as shown straight away, so it won't come back tonight. */
+    suspend fun showCard(eventId: Long, cardId: String) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) {
+            lockDao.reachStep(eventId, LockStep.INTERROGATION.number)
+            lockDao.setCard(eventId, cardId)
+        }
+    }
+
+    suspend fun answerCard(eventId: Long, answerLabel: String) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.setCardAnswer(eventId, answerLabel)
     }
 
     suspend fun reachStep(eventId: Long, step: LockStep) = withContext(Dispatchers.IO) {

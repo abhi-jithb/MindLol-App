@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import com.abhijith.mindlol.domain.LockOutcome
+import com.abhijith.mindlol.domain.LockReason
 import java.time.LocalDate
 
 /** Lock screen attempts and service sessions (database v3). Nothing here is ever deleted. */
@@ -26,6 +27,20 @@ interface LockDao {
 
     @Query("UPDATE lock_event SET outcome = :outcome WHERE id = :id")
     suspend fun setOutcome(id: Long, outcome: LockOutcome)
+
+    /** Step 3 showed this card. Saved when shown, so leaving before answering still counts. */
+    @Query("UPDATE lock_event SET cardId = :cardId WHERE id = :id")
+    suspend fun setCard(id: Long, cardId: String)
+
+    @Query("UPDATE lock_event SET cardAnswer = :answer WHERE id = :id")
+    suspend fun setCardAnswer(id: Long, answer: String)
+
+    /** Card ids already shown for one night (BEDTIME) or day (LIMIT), oldest first, repeats kept. */
+    @Query(
+        "SELECT cardId FROM lock_event WHERE periodDate = :periodDate AND reason = :reason " +
+            "AND cardId IS NOT NULL ORDER BY shownAtMillis"
+    )
+    suspend fun cardsShown(periodDate: LocalDate, reason: LockReason): List<String>
 
     @Query("SELECT * FROM lock_event WHERE periodDate >= :from ORDER BY shownAtMillis")
     suspend fun eventsFrom(from: LocalDate): List<LockEventEntity>

@@ -5,10 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.data.repository.LockScreenInfo
+import com.abhijith.mindlol.domain.CardAnswer
 import com.abhijith.mindlol.domain.Confession
 import com.abhijith.mindlol.domain.LockOutcome
 import com.abhijith.mindlol.domain.LockReason
 import com.abhijith.mindlol.domain.LockStep
+import com.abhijith.mindlol.domain.UnlockSteps
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,14 +18,23 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-/** Which screen of the unlock flow is showing. Steps 3–5 arrive in item 7. */
-enum class LockScreenStep { STARE, CONFESSION, NOT_BUILT_YET }
+/**
+ * Which screen of the unlock flow is showing. GRANT_NOT_BUILT_YET is temporary: the grant
+ * (actually opening the app) arrives in item 8.
+ */
+enum class LockScreenStep { STARE, CONFESSION, INTERROGATION, BARGAIN, LAST_CHANCE, GRANT_NOT_BUILT_YET }
 
 data class LockUiState(
     val info: LockScreenInfo? = null,
     val step: LockScreenStep = LockScreenStep.STARE,
     /** Seconds left before "I want to cheat" can be pressed. */
-    val countdownLeft: Int = 0
+    val countdownLeft: Int = 0,
+    /** Step 3: the answer you tapped (null = not answered yet). */
+    val answer: CardAnswer? = null,
+    /** Step 3: the reply has finished typing out, so "Continue" can show. */
+    val replyTyped: Boolean = false,
+    /** Step 4: the minutes you bargained for. */
+    val minutes: Int? = null
 )
 
 /**
@@ -73,10 +84,63 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         return Confession.matches(confession.text.toString(), info.requiredConfession)
     }
 
-    /** Confession accepted. Steps 3–5 don't exist yet, so this build stops here. */
+    /** Confession accepted: on to step 3, the interrogation. The card counts as shown from here. */
     fun confess() {
-        if (!confessionMatches()) return
-        _state.update { it.copy(step = LockScreenStep.NOT_BUILT_YET) }
+        val info = _state.value.info ?: return
+        if (_state.value.step != LockScreenStep.CONFESSION || !confessionMatches()) return
+        val card = info.card
+        if (card == null) {
+            // No card is allowed at all (empty card list): skip straight to the bargain.
+            toBargain()
+            return
+        }
+        _state.update { it.copy(step = LockScreenStep.INTERROGATION, answer = null, replyTyped = false) }
+        viewModelScope.launch { repository.showCard(info.eventId, card.id) }
+    }
+
+    /** Step 3: one answer per card. The mascot reacts and the reply types out. */
+    fun answer(answer: CardAnswer) {
+        val info = _state.value.info ?: return
+        val card = info.card ?: return
+        if (_state.value.step != LockScreenStep.INTERROGATION || _state.value.answer != null) return
+        if (answer !in card.answers) return
+        _state.update { it.copy(answer = answer, replyTyped = false) }
+        viewModelScope.launch { repository.answerCard(info.eventId, answer.label) }
+    }
+
+    fun replyFinished() {
+        if (_state.value.answer != null) _state.update { it.copy(replyTyped = true) }
+    }
+
+    /** Step 3 → 4. Only after answering and reading the reply. */
+    fun continueAfterReply() {
+        val s = _state.value
+        if (s.step != LockScreenStep.INTERROGATION || s.answer == null || !s.replyTyped) return
+        toBargain()
+    }
+
+    private fun toBargain() {
+        val info = _state.value.info ?: return
+        _state.update { it.copy(step = LockScreenStep.BARGAIN) }
+        viewModelScope.launch { repository.reachStep(info.eventId, LockStep.BARGAIN) }
+    }
+
+    /** Step 4 → 5: 2, 5 or 10 minutes. */
+    fun bargain(minutes: Int) {
+        val info = _state.value.info ?: return
+        if (_state.value.step != LockScreenStep.BARGAIN || !UnlockSteps.isBargainOption(minutes)) return
+        _state.update { it.copy(step = LockScreenStep.LAST_CHANCE, minutes = minutes) }
+        viewModelScope.launch { repository.reachStep(info.eventId, LockStep.LAST_CHANCE) }
+    }
+
+    /**
+     * Step 5: the button was held for the full 3 seconds. The grant (opening the app for the
+     * chosen minutes) comes in item 8; until then this only shows that the steps are done.
+     */
+    fun holdCompleted() {
+        val s = _state.value
+        if (s.step != LockScreenStep.LAST_CHANCE || s.minutes == null) return
+        _state.update { it.copy(step = LockScreenStep.GRANT_NOT_BUILT_YET) }
     }
 
     /** "Go back to sleep" or the back button. */
