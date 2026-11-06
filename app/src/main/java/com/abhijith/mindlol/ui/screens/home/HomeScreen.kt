@@ -22,14 +22,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.abhijith.mindlol.data.repository.FakeData
+import com.abhijith.mindlol.domain.SleepTime
 import com.abhijith.mindlol.domain.AppUsage
 import com.abhijith.mindlol.ui.components.AppUsageRow
 import com.abhijith.mindlol.ui.components.Mascot
+import com.abhijith.mindlol.ui.components.MascotReaction
+import com.abhijith.mindlol.ui.components.reactionFor
 import com.abhijith.mindlol.ui.components.MascotMood
 import com.abhijith.mindlol.ui.components.SmallStat
 import com.abhijith.mindlol.ui.components.formatCount
@@ -56,7 +59,7 @@ fun HomeContent(state: HomeUiState) {
         averageMinutes = state.weekAverageMinutes,
         cheatsToday = state.cheatsToday,
         now = LocalTime.now(),
-        bedTime = FakeData.settings.bedTime
+        bedTime = SleepTime.toLocalTime(state.bedtimeMinutes)
     )
 
     Column(
@@ -75,7 +78,24 @@ fun HomeContent(state: HomeUiState) {
         }
 
         Spacer(Modifier.height(32.dp))
-        Mascot(mood = mood, size = 120.dp, modifier = Modifier.revealOnEnter(0))
+        // Right after a cheat, the mascot reacts to it and says its line; otherwise it shows the day's mood.
+        val recent = state.recentCheat
+        Mascot(
+            mood = mood,
+            reaction = recent?.let { reactionFor(it.context) } ?: MascotReaction.NONE,
+            size = 120.dp,
+            modifier = Modifier.revealOnEnter(0)
+        )
+        if (recent != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = recent.roast,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.revealOnEnter(1)
+            )
+        }
         Spacer(Modifier.height(24.dp))
 
         CountUpMinutes(state.totalMinutes)

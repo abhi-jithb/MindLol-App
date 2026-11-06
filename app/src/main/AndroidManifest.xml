@@ -6,6 +6,10 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Warnings before a lock (Step 3, W3): "Bedtime in 15 min…" and, if the pill can't show,
+         "5 min left on <App>". Android 13+ asks you first, from Settings → Warnings. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ hides other apps by default. This lets MindLol see apps that have a
          launcher icon, so usage can show "Instagram" instead of "com.instagram.android".
          Deliberately narrower than QUERY_ALL_PACKAGES. -->
@@ -13,6 +17,10 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- System Settings, so the live lock can find it and never lock it. -->
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
         </intent>
         <!-- The home-screen app, so it can be left out of rankings. -->
         <intent>
@@ -34,6 +42,31 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The lock screen, opened by the live lock service over a locked app. Its own task
+             (singleTask + own affinity), never in recents, never exported. -->
+        <activity
+            android:name=".ui.lock.LockActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.abhijith.mindlol.lock"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- The live lock (Phase 3b). Only the system can bind it (BIND_ACCESSIBILITY_SERVICE);
+             you switch it on yourself in Settings → Accessibility. -->
+        <service
+            android:name=".service.LockAccessibilityService"
+            android:exported="true"
+            android:label="MindLol live lock"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/lock_accessibility" />
+        </service>
 
     </application>
 </manifest>

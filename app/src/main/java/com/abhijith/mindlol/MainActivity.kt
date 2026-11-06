@@ -3,6 +3,7 @@ package com.abhijith.mindlol
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 
@@ -13,7 +14,9 @@ import android.os.Build
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.abhijith.mindlol.data.usage.UsagePermission
+import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.ui.theme.MindLolTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 import com.abhijith.mindlol.ui.navigation.MindLolApp
@@ -29,8 +32,10 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         setContent{
-            MindLolTheme {
-                val container = (application as MindLolApplication).container
+            val container = (application as MindLolApplication).container
+            // The chosen theme, live: changing it in Settings restyles the app at once.
+            val settings by container.settingsRepository.settings.collectAsState(initial = null)
+            MindLolTheme(theme = settings?.theme ?: AppTheme.PURE_BLACK) {
                 // collectAsState turns the StateFlow into Compose state: when it changes, the UI redraws.
                 val granted by container.usagePermission.granted.collectAsState()
                 MindLolApp(
@@ -54,7 +59,21 @@ class MainActivity : ComponentActivity() {
         container.usagePermission.refresh()
         // Pull fresh numbers from Android into Room on every app open (also runs the one-time import).
         if (container.usagePermission.granted.value) {
-            container.applicationScope.launch { container.usageRepository.refresh() }
+            container.applicationScope.launch {
+                try {
+                    container.usageRepository.refresh()
+                } catch (e: CancellationException) {
+                    throw e // normal coroutine cancellation, not an error: let it through
+                } catch (e: Exception) {
+                    // A failed refresh must never crash the app. Each day is written in its own
+                    // transaction, so whatever is already in Room stays and screens keep showing it.
+                    Log.w(TAG, "Refresh on app open failed; keeping old data", e)
+                }
+            }
         }
+    }
+
+    private companion object {
+        const val TAG = "MainActivity"
     }
 }

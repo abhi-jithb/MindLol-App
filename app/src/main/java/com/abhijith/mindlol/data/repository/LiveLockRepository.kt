@@ -1,0 +1,271 @@
+package com.abhijith.mindlol.data.repository
+
+import com.abhijith.mindlol.data.db.LockDao
+import com.abhijith.mindlol.data.db.LockEventEntity
+import com.abhijith.mindlol.data.db.LockSessionEntity
+import com.abhijith.mindlol.data.db.RulesDao
+import com.abhijith.mindlol.data.db.toDomain
+import com.abhijith.mindlol.data.db.toGrant
+import com.abhijith.mindlol.data.settings.SettingsRepository
+import com.abhijith.mindlol.data.usage.AppNames
+import com.abhijith.mindlol.data.usage.SystemApps
+import com.abhijith.mindlol.data.usage.UsageEventsReader
+import com.abhijith.mindlol.domain.CheatType
+import com.abhijith.mindlol.domain.Confession
+import com.abhijith.mindlol.domain.InterrogationCard
+import com.abhijith.mindlol.domain.InterrogationCards
+import com.abhijith.mindlol.domain.LiveLockDecider
+import com.abhijith.mindlol.domain.LockOutcome
+import com.abhijith.mindlol.domain.LockReason
+import com.abhijith.mindlol.domain.LockStep
+import com.abhijith.mindlol.domain.RoastContext
+import com.abhijith.mindlol.domain.RoastGenerator
+import com.abhijith.mindlol.domain.SleepTime
+import com.abhijith.mindlol.domain.LockDecision
+import com.abhijith.mindlol.domain.PeriodKind
+import com.abhijith.mindlol.domain.RulesSnapshot
+import com.abhijith.mindlol.domain.UnlockGrant
+import com.abhijith.mindlol.domain.UpcomingLock
+import com.abhijith.mindlol.domain.WarningPlanner
+import com.abhijith.mindlol.domain.WarningText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
+
+/**
+ * What the live lock service needs from the data layer: the decision for the app in front,
+ * and recording its own sessions (for LOCK_DISABLED). Rules come only from saved snapshots.
+ */
+/** A bedtime notification to show now ([notice]), or when to check again ([nextCheckAtMillis]). */
+data class BedtimeCheck(val notice: BedtimeNotice?, val nextCheckAtMillis: Long?)
+
+data class BedtimeNotice(val nightDate: LocalDate, val bedtimeMillis: Long, val text: String)
+
+/** Everything the lock screen shows, worked out once when it opens. */
+data class LockScreenInfo(
+    val eventId: Long,
+    val packageName: String,
+    val appName: String,
+    val reason: LockReason,
+    val countdownSeconds: Int,
+    val stareLine: String,
+    val confessionLine: String,
+    val requiredConfession: String,
+    /** Step 3's card: not shown tonight yet, or the one shown longest ago. Null only if no card is allowed. */
+    val card: InterrogationCard?,
+    val bargainLine: String,
+    val lastChanceLine: String
+)
+
+class LiveLockRepository(
+    private val rulesDao: RulesDao,
+    private val lockDao: LockDao,
+    private val reader: UsageEventsReader,
+    private val systemApps: SystemApps,
+    private val appNames: AppNames,
+    private val settingsRepository: SettingsRepository
+) {
+    private val zone: ZoneId get() = ZoneId.systemDefault()
+
+    // Settings and the dialer don't change while the service runs; worked out once.
+    val neverLockable: Set<String> by lazy { systemApps.neverLockable() }
+
+    /**
+     * The only windows the lock reacts to: apps with a launcher icon (the ones you can lock) and
+     * the home screen (so going home and reopening an app is seen as a new open). Everything else
+     * (keyboard, status bar, Vivo's gesture and system overlays) is ignored.
+     * Read once per service start, so apps installed later are picked up after the next start.
+     */
+    fun trackedPackages(): Set<String> =
+        appNames.launcherApps().map { it.packageName }.toSet() + reader.excludedPackages - systemApps.notApps()
+
+    /** Everything a decision needs, read once: the same facts serve decide() and upcomingLock(). */
+    private class Facts(
+        val night: RulesSnapshot?,
+        val day: RulesSnapshot?,
+        val usedTodayMs: Long,
+        val grants: List<UnlockGrant>
+    )
+
+    private suspend fun facts(packageName: String, nowMillis: Long): Facts {
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+        // The night that contains now, or else the next one (so Allow can say when bedtime starts).
+        val nights = stored.filter { it.kind == PeriodKind.NIGHT && it.endMillis > nowMillis }
+        val night = nights.firstOrNull { it.startMillis <= nowMillis } ?: nights.minByOrNull { it.startMillis }
+        val day = stored.firstOrNull { it.kind == PeriodKind.DAY && it.date == today }
+
+        // Today's usage is only read when this app has a limit today (it costs one event query).
+        val usedTodayMs = if (day?.limits?.containsKey(packageName) == true) {
+            reader.readSessions(day.startMillis, nowMillis)
+                .filter { it.packageName == packageName }
+                .sumOf { it.endMillis - it.startMillis }
+        } else 0L
+
+        // Grants last at most 10 minutes, so only recent ones can still be running.
+        val grants = lockDao.grantsSince(nowMillis - MAX_GRANT_MS).mapNotNull { it.toGrant() }
+        return Facts(night, day, usedTodayMs, grants)
+    }
+
+    suspend fun decide(packageName: String, nowMillis: Long = System.currentTimeMillis()): LockDecision =
+        withContext(Dispatchers.IO) {
+            val f = facts(packageName, nowMillis)
+            LiveLockDecider.decide(packageName, nowMillis, f.night, f.day, f.usedTodayMs, f.grants, neverLockable)
+        }
+
+    /** When the app in front will lock if it stays in front (for the warning pill), or null. */
+    suspend fun upcomingLock(packageName: String, nowMillis: Long = System.currentTimeMillis()): UpcomingLock? =
+        withContext(Dispatchers.IO) {
+            if (packageName in neverLockable) return@withContext null
+            val f = facts(packageName, nowMillis)
+            LiveLockDecider.upcomingLock(packageName, nowMillis, f.night, f.day, f.usedTodayMs, f.grants, neverLockable)
+        }
+
+    fun appName(packageName: String): String = appNames.labelFor(packageName)
+
+    /**
+     * The bedtime notification: [BedtimeCheck.notice] when it should show now (15 min before a saved
+     * night with locked apps, not yet shown for that night), and [BedtimeCheck.nextCheckAtMillis]
+     * when its window next opens. [appInFront] is named first if it's locked tonight.
+     */
+    suspend fun bedtimeCheck(appInFront: String?, shownForNight: LocalDate?, nowMillis: Long = System.currentTimeMillis()): BedtimeCheck =
+        withContext(Dispatchers.IO) {
+            val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+            val night = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+                .filter { it.kind == PeriodKind.NIGHT && it.startMillis > nowMillis }
+                .minByOrNull { it.startMillis }
+            if (night == null || !WarningPlanner.bedtimeNoticeDue(nowMillis, night, shownForNight)) {
+                return@withContext BedtimeCheck(null, WarningPlanner.bedtimeNoticeAt(nowMillis, night))
+            }
+            val names = night.lockedApps
+                .sortedWith(compareBy<String> { it != appInFront }.thenBy { appNames.labelFor(it).lowercase() })
+                .map { appNames.labelFor(it) }
+            val bedtime = Instant.ofEpochMilli(night.startMillis).atZone(zone).toLocalTime()
+            val text = WarningText.bedtimeNotification(night.startMillis - nowMillis, bedtime, names)
+            BedtimeCheck(BedtimeNotice(night.date, night.startMillis, text), null)
+        }
+
+    /** Saves a new session at connect time and returns its id. */
+    suspend fun startSession(nowMillis: Long, bootAtMillis: Long): Long = withContext(Dispatchers.IO) {
+        lockDao.insertSession(LockSessionEntity(connectedAtMillis = nowMillis, lastAliveMillis = nowMillis, disconnectedAtMillis = null, bootAtMillis = bootAtMillis))
+    }
+
+    /** Writes the heartbeat only while it matters (a night with locks, or a day with limits). Returns whether it wrote. */
+    suspend fun heartbeatIfItMatters(sessionId: Long, nowMillis: Long = System.currentTimeMillis()): Boolean =
+        withContext(Dispatchers.IO) {
+            val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+            val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+            val matters = LiveLockDecider.heartbeatMatters(nowMillis, stored)
+            if (matters) lockDao.heartbeat(sessionId, nowMillis)
+            matters
+        }
+
+    suspend fun endSession(sessionId: Long, nowMillis: Long) = withContext(Dispatchers.IO) {
+        lockDao.markDisconnected(sessionId, nowMillis)
+    }
+
+    /**
+     * Saves a new lock_event (step 1 reached, outcome LEFT until something else happens) and works
+     * out what the lock screen shows: the app's name, step 1's countdown (escalation), and the lines.
+     *
+     * [test] (debug builds only, from the adb test hook): nothing is written at all, so a test lock
+     * screen never counts in stats, cheats or escalation. Its event id is [TEST_EVENT_ID].
+     */
+    suspend fun openLockScreen(
+        packageName: String,
+        reason: LockReason,
+        periodDate: LocalDate,
+        nowMillis: Long = System.currentTimeMillis(),
+        test: Boolean = false
+    ): LockScreenInfo = withContext(Dispatchers.IO) {
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+        val grantsToday = lockDao.grantsSince(nowMillis - DAY_MS).mapNotNull { it.toGrant() }
+        val countdown = LiveLockDecider.countdownSeconds(LiveLockDecider.unlocksSinceReset(grantsToday, nowMillis, stored))
+
+        val eventId = if (test) TEST_EVENT_ID else lockDao.insertEvent(
+            LockEventEntity(
+                packageName = packageName, reason = reason, periodDate = periodDate, shownAtMillis = nowMillis,
+                stepReached = LockStep.STARE.number, outcome = LockOutcome.LEFT, countdownSeconds = countdown,
+                grantedMinutes = null, grantedAtMillis = null, cardId = null, cardAnswer = null
+            )
+        )
+
+        val settings = settingsRepository.settings.first()
+        val appName = appNames.labelFor(packageName)
+        val night = stored.firstOrNull { it.kind == PeriodKind.NIGHT && it.date == periodDate }
+        val day = stored.firstOrNull { it.kind == PeriodKind.DAY && it.date == today }
+        val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        val cheatsThisWeek = rulesDao.cheatsFrom(monday).map { it.toDomain() }
+        val context = RoastContext(
+            appName = appName,
+            type = if (reason == LockReason.BEDTIME) CheatType.BEDTIME else CheatType.LIMIT,
+            startTime = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalTime(),
+            minutes = 0,
+            cheatsThisWeek = cheatsThisWeek.size,
+            sameAppThisWeek = cheatsThisWeek.count { it.packageName == packageName },
+            bedtime = night?.let { Instant.ofEpochMilli(it.startMillis).atZone(zone).toLocalTime() } ?: SleepTime.toLocalTime(settings.bedtimeMinutes),
+            wake = night?.let { Instant.ofEpochMilli(it.endMillis).atZone(zone).toLocalTime() } ?: SleepTime.toLocalTime(settings.wakeMinutes),
+            limitMinutes = day?.limits?.get(packageName),
+            intensity = settings.roastIntensity,
+            seed = "lock-$eventId" // same lock screen, same lines
+        )
+        LockScreenInfo(
+            eventId = eventId,
+            packageName = packageName,
+            appName = appName,
+            reason = reason,
+            countdownSeconds = countdown,
+            stareLine = RoastGenerator.stepLine(LockStep.STARE, context).orEmpty(),
+            confessionLine = RoastGenerator.stepLine(LockStep.CONFESSION, context).orEmpty(),
+            requiredConfession = Confession.required(appName, reason),
+            // Reading which cards were shown is fine in a test lock screen; only writes are skipped.
+            card = InterrogationCards.pick(settings.roastIntensity, lockDao.cardsShown(periodDate, reason), seed = nowMillis, reason = reason),
+            bargainLine = RoastGenerator.stepLine(LockStep.BARGAIN, context).orEmpty(),
+            lastChanceLine = RoastGenerator.stepLine(LockStep.LAST_CHANCE, context).orEmpty()
+        )
+    }
+
+    /** Step 3 reached: the card is saved as shown straight away, so it won't come back tonight. */
+    suspend fun showCard(eventId: Long, cardId: String) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) {
+            lockDao.reachStep(eventId, LockStep.INTERROGATION.number)
+            lockDao.setCard(eventId, cardId)
+        }
+    }
+
+    /**
+     * Step 5 done: saves the grant (outcome UNLOCKED, minutes, granted at now). The live lock
+     * reads it on the next decision for this app, and it raises the next countdown (escalation).
+     * Returns false for a test lock screen (nothing saved) or if the row was no longer open.
+     */
+    suspend fun grant(eventId: Long, minutes: Int, nowMillis: Long = System.currentTimeMillis()): Boolean =
+        withContext(Dispatchers.IO) {
+            if (eventId == TEST_EVENT_ID) false else lockDao.grant(eventId, minutes, nowMillis) == 1
+        }
+
+    suspend fun answerCard(eventId: Long, answerLabel: String) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.setCardAnswer(eventId, answerLabel)
+    }
+
+    suspend fun reachStep(eventId: Long, step: LockStep) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.reachStep(eventId, step.number)
+    }
+
+    suspend fun endLockScreen(eventId: Long, outcome: LockOutcome) = withContext(Dispatchers.IO) {
+        if (eventId != TEST_EVENT_ID) lockDao.setOutcome(eventId, outcome)
+    }
+
+    companion object {
+        /** The event id of a test lock screen: never a real row (Room ids start at 1). */
+        const val TEST_EVENT_ID = -1L
+
+        private const val MAX_GRANT_MS = 11 * 60_000L
+        private const val DAY_MS = 24 * 60 * 60_000L
+    }
+}

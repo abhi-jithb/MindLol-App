@@ -1,7 +1,5 @@
 package com.abhijith.mindlol.domain
 
-import java.time.LocalTime
-
 // Plain data shapes the screens draw from.
 // Phase 1 fills them from FakeData; Phase 2 fills the same shapes with real usage.
 // All durations are in whole minutes.
@@ -43,12 +41,12 @@ data class UsageSeries(
     val peakIndex: Int get() = minutes.indices.maxByOrNull { minutes[it] } ?: 0
 }
 
-/** One broken rule, with the line the app roasts you with. */
+/** One cheat ready to show: the cheat, its app's name, its roast line and the context the line came from. */
 data class CheatEntry(
-    val day: String,
-    val time: String,
+    val cheat: Cheat,
     val appName: String,
-    val roast: String
+    val roast: String,
+    val context: RoastContext
 )
 
 data class Streak(
@@ -62,7 +60,9 @@ data class TotalStat(
     val value: String
 )
 
+/** One app's rules, as Settings shows them. Stored by package name; [appName] is for display. */
 data class AppRule(
+    val packageName: String,
     val appName: String,
     val dailyLimitMinutes: Int?, // null means no limit
     val lockedAtBedtime: Boolean
@@ -72,13 +72,4 @@ data class PermissionInfo(
     val name: String,
     val reason: String,
     val status: String
-)
-
-data class SettingsValues(
-    val wakeTime: LocalTime,
-    val bedTime: LocalTime,
-    val appRules: List<AppRule>,
-    val permissions: List<PermissionInfo>,
-    val themeOptions: List<String>,
-    val selectedTheme: Int
 )
