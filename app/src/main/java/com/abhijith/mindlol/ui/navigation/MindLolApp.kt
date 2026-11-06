@@ -1,5 +1,6 @@
 package com.abhijith.mindlol.ui.navigation
 
+import com.abhijith.mindlol.ui.screens.livelock.LiveLockScreen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,6 +35,7 @@ import com.abhijith.mindlol.ui.theme.Motion
 // Not tabs, so they are not in Destination.
 private const val SPLASH_ROUTE = "splash"
 private const val USAGE_ACCESS_ROUTE = "usage-access"
+private const val LIVE_LOCK_ROUTE = "live-lock"
 
 /**
  * Root of the UI.
@@ -139,9 +141,12 @@ fun MindLolApp(
                 SettingsScreen(
                     usageAccessGranted = usageAccessGranted,
                     onOpenUsageSettings = onOpenUsageSettings,
-                    onOpenAppSettings = onOpenAppSettings
+                    onOpenAppSettings = onOpenAppSettings,
+                    onOpenLiveLock = { navController.navigate(LIVE_LOCK_ROUTE) }
                 )
             }
+            // The disclosure before Accessibility settings. Not a tab: Back returns to Settings.
+            composable(LIVE_LOCK_ROUTE) { LiveLockScreen(onDone = { navController.popBackStack() }) }
         }
     }
 }

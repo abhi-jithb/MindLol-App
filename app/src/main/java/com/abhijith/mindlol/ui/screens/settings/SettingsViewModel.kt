@@ -12,6 +12,7 @@ import com.abhijith.mindlol.data.usage.AppNames
 import com.abhijith.mindlol.domain.AppRule
 import com.abhijith.mindlol.domain.AppTheme
 import com.abhijith.mindlol.domain.InstalledApp
+import com.abhijith.mindlol.domain.LiveLockStatus
 import com.abhijith.mindlol.domain.RoastIntensity
 import com.abhijith.mindlol.domain.Settings
 import com.abhijith.mindlol.domain.SleepTime
@@ -45,7 +46,9 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val repository: SettingsRepository,
     private val appNames: AppNames,
-    private val cheats: CheatRepository
+    private val cheats: CheatRepository,
+    /** MindLol, system Settings and the dialer: never offered in "Add app". Read off the main thread. */
+    private val neverLockable: () -> Set<String>
 ) : ViewModel() {
 
     /** A short note to show once (a snackbar), e.g. "Applies from tomorrow". Null when there is none. */
@@ -57,6 +60,7 @@ class SettingsViewModel(
     }
 
     private val installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
+    private val hiddenFromPicker = MutableStateFlow<Set<String>>(emptySet())
 
     // Apps picked with "Add app" this visit. Kept so a row doesn't vanish the moment you
     // switch its lock off before setting a limit.
@@ -64,12 +68,14 @@ class SettingsViewModel(
 
     init {
         viewModelScope.launch {
+            // Never-lockable first, so the picker never briefly offers them.
+            hiddenFromPicker.value = withContext(Dispatchers.IO) { neverLockable() }
             installedApps.value = withContext(Dispatchers.IO) { appNames.launcherApps() }
         }
     }
 
     val uiState: StateFlow<SettingsUiState> =
-        combine(repository.settings, installedApps, addedThisVisit) { settings, apps, added ->
+        combine(repository.settings, installedApps, addedThisVisit, hiddenFromPicker) { settings, apps, added, hidden ->
             val labels = apps.associate { it.packageName to it.label }
             val shown = (settings.lockedApps + settings.appLimits.keys + added).distinct()
             SettingsUiState(
@@ -85,7 +91,7 @@ class SettingsViewModel(
                         )
                     }
                     .sortedBy { it.appName.lowercase() },
-                addableApps = apps.filter { it.packageName !in shown }
+                addableApps = LiveLockStatus.addableApps(apps, shown, hidden)
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -158,7 +164,12 @@ class SettingsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as MindLolApplication
-                SettingsViewModel(app.container.settingsRepository, app.container.appNames, app.container.cheatRepository)
+                SettingsViewModel(
+                    app.container.settingsRepository,
+                    app.container.appNames,
+                    app.container.cheatRepository,
+                    neverLockable = { app.container.liveLockRepository.neverLockable }
+                )
             }
         }
     }

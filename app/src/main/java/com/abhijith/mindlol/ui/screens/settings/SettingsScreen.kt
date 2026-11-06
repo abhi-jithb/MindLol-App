@@ -1,5 +1,9 @@
 package com.abhijith.mindlol.ui.screens.settings
 
+import androidx.compose.ui.text.font.FontWeight
+import com.abhijith.mindlol.domain.LiveLockState
+import com.abhijith.mindlol.domain.LiveLockStatus
+import com.abhijith.mindlol.ui.screens.livelock.rememberLiveLockState
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -107,6 +111,7 @@ fun SettingsScreen(
     usageAccessGranted: Boolean,
     onOpenUsageSettings: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    onOpenLiveLock: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -129,7 +134,9 @@ fun SettingsScreen(
         ),
         usageAccessGranted = usageAccessGranted,
         onOpenUsageSettings = onOpenUsageSettings,
-        onOpenAppSettings = onOpenAppSettings
+        onOpenAppSettings = onOpenAppSettings,
+        liveLock = rememberLiveLockState(),
+        onOpenLiveLock = onOpenLiveLock
     )
 }
 
@@ -155,7 +162,9 @@ fun SettingsContent(
     actions: SettingsActions,
     usageAccessGranted: Boolean,
     onOpenUsageSettings: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    onOpenAppSettings: () -> Unit,
+    liveLock: LiveLockState = LiveLockState.OFF,
+    onOpenLiveLock: () -> Unit = {}
 ) {
     val settings = state.settings
     val override = state.activeOverride
@@ -232,6 +241,9 @@ fun SettingsContent(
             SectionLabel("ROAST INTENSITY", Modifier.revealOnEnter(7))
             RoastIntensitySelector(selected = settings.roastIntensity, onSelect = actions.setRoastIntensity)
 
+            SectionLabel("LIVE LOCK", Modifier.revealOnEnter(8))
+            LiveLockRow(state = liveLock, onClick = onOpenLiveLock)
+
             SectionLabel("PERMISSIONS", Modifier.revealOnEnter(8))
             PermissionRow(
                 permission = PermissionInfo(
@@ -241,7 +253,7 @@ fun SettingsContent(
                 ),
                 onClick = onOpenUsageSettings
             )
-            WarningsRow()
+            WarningsRow(liveLockOn = liveLock == LiveLockState.ON)
 
             SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
             BackgroundLimitsSection(onOpenAppSettings)
@@ -565,7 +577,7 @@ private fun PermissionRow(permission: PermissionInfo, onClick: (() -> Unit)? = n
  * The pill needs no permission; this only covers the bedtime notification and the limit fallback.
  */
 @Composable
-private fun WarningsRow() {
+private fun WarningsRow(liveLockOn: Boolean) {
     val context = LocalContext.current
     val notifier = remember { WarningNotifier(context) }
     var access by remember { mutableStateOf(notifier.access()) }
@@ -587,7 +599,11 @@ private fun WarningsRow() {
     PermissionRow(
         permission = PermissionInfo(
             name = "Warnings",
-            reason = "Bedtime in 15 min, and limit warnings. Needs the live lock",
+            reason = if (liveLockOn) {
+                "Bedtime in 15 min, and limit warnings"
+            } else {
+                "Warnings need the live lock, and it's off. No warnings until it's on"
+            },
             status = WarningsPermission.status(access)
         ),
         onClick = {
@@ -597,6 +613,43 @@ private fun WarningsRow() {
                 openNotificationSettings(context)
             }
         }
+    )
+}
+
+/**
+ * The "Live lock" row. OFF is loud: bold, in a white-bordered box, because nothing is locked
+ * while it's off. Tapping it opens the disclosure screen (never Accessibility settings directly).
+ * Under it, the shortcut note: the accessibility shortcut can switch the lock off with one tap.
+ */
+@Composable
+private fun LiveLockRow(state: LiveLockState, onClick: () -> Unit) {
+    val loud = state != LiveLockState.ON
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .then(if (loud) Modifier.border(1.5.dp, MaterialTheme.colorScheme.onBackground, shape) else Modifier)
+            .clickable(onClick = onClick)
+            .padding(horizontal = if (loud) 12.dp else 0.dp, vertical = 12.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Live lock", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+            Text(LiveLockStatus.reason(state), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            LiveLockStatus.status(state),
+            style = if (loud) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.labelMedium,
+            color = if (loud) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Text(
+        "Keep the accessibility shortcut off: tapping it switches the lock off.",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 8.dp)
     )
 }
 
