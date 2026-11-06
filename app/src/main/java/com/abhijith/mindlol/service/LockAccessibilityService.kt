@@ -15,6 +15,7 @@ import com.abhijith.mindlol.MindLolApplication
 import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.domain.LiveLockDecider
 import com.abhijith.mindlol.domain.LockDecision
+import com.abhijith.mindlol.domain.LockReason
 import com.abhijith.mindlol.domain.PillMemory
 import com.abhijith.mindlol.domain.PillMode
 import com.abhijith.mindlol.domain.UpcomingLock
@@ -35,6 +36,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import java.time.LocalDate
 
 /**
  * The live lock (Phase 3b). The system starts it once you switch it on in Settings → Accessibility,
@@ -68,6 +70,13 @@ class LockAccessibilityService : AccessibilityService() {
     /** The app, lock and mode the pill is showing now; used when it's tapped. */
     private var pillTarget: Pair<String, UpcomingLock>? = null
     private var pillMode: PillMode? = null
+
+    // ---------- Notifications (Step 3, W3) ----------
+    private var notifier: WarningNotifier? = null
+    private var bedtimeJob: Job? = null
+    /** The night the bedtime notification was shown for (memory only: at most one repeat after a restart). */
+    private var bedtimeShownFor: LocalDate? = null
+    private var bedtimeCheckedAt = 0L
     private var receiverRegistered = false
     // Apps and the home screen; null until worked out (it lists installed apps, so it runs off the main thread).
     private var tracked: Set<String>? = null
@@ -101,7 +110,9 @@ class LockAccessibilityService : AccessibilityService() {
                 heartbeatJob = launch { heartbeatLoop(repo, id) }
             }
             scope.launch(Dispatchers.IO) { tracked = repo.trackedPackages() }
+            scope.launch { checkBedtime("connected", force = true) }
         }
+        guarded("create notifier") { notifier = WarningNotifier(this).also { it.ensureChannel() } }
         guarded("create warning pill") { pill = WarningPill(this) { guarded("pill tap") { onPillTapped() } } }
         guarded("register screen receiver") {
             val filter = IntentFilter().apply {
@@ -169,6 +180,8 @@ class LockAccessibilityService : AccessibilityService() {
      */
     private suspend fun decideAndAct(pkg: String, why: String) {
         val repo = repository ?: return
+        // Separate job, so the bedtime check never delays the lock decision.
+        scope.launch { checkBedtime(why, force = why != "opened") }
         val decision = try {
             repo.decide(pkg)
         } catch (e: CancellationException) {
@@ -252,8 +265,14 @@ class LockAccessibilityService : AccessibilityService() {
             }
             val left = upcoming.atMillis - now
             if (!view.show(WarningText.pill(mode, left), mode)) {
-                // W3 adds the fallback notification for limits here.
                 Log.w(TAG, "Warning pill for $pkg couldn't show ($mode, ${WarningText.countdown(left)} left)")
+                // Limits warn with the pill only, so if it can't show, a notification takes its place.
+                // (Bedtime already has its own notification.) The planner marked the threshold shown,
+                // so this happens once per threshold.
+                if (mode == PillMode.WARNING && upcoming.reason == LockReason.LIMIT) {
+                    val name = repository?.appName(pkg) ?: pkg
+                    notifier?.show(WarningNotifier.ID_LIMIT, WarningText.limitNotification(name, left), left)
+                }
                 return
             }
             if (pillMode != mode) Log.w(TAG, "pill $pkg: $mode, ${WarningText.countdown(left)} left (${upcoming.cause})")
@@ -262,6 +281,39 @@ class LockAccessibilityService : AccessibilityService() {
             // Wake at the next whole second of the countdown, so "4:59" ticks exactly.
             delay((left % 1_000).let { if (it == 0L) 1_000L else it }.coerceAtLeast(MIN_PILL_DELAY_MS))
         }
+    }
+
+    /**
+     * The bedtime notification. Checked when the service connects, when you unlock the phone, on
+     * the timer set for 15 min before bedtime, and on app switches (at most once a minute, a
+     * small query). Shows once per night, only while the phone is in use.
+     */
+    private suspend fun checkBedtime(why: String, force: Boolean = false) {
+        val repo = repository ?: return
+        val now = System.currentTimeMillis()
+        if (!force && now - bedtimeCheckedAt < BEDTIME_CHECK_THROTTLE_MS) return
+        bedtimeCheckedAt = now
+        val check = try {
+            repo.bedtimeCheck(lastPackage, bedtimeShownFor, now)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Live lock: bedtime check failed, still running", e)
+            return
+        }
+        val notice = check.notice
+        if (notice != null && isUsable()) {
+            if (notifier?.show(WarningNotifier.ID_BEDTIME, notice.text, notice.bedtimeMillis - now) == true) {
+                bedtimeShownFor = notice.nightDate
+            }
+        }
+        val next = check.nextCheckAtMillis ?: return
+        bedtimeJob?.cancel()
+        bedtimeJob = scope.launch {
+            delay((next - System.currentTimeMillis()).coerceAtLeast(MIN_PILL_DELAY_MS))
+            checkBedtime("bedtime timer", force = true)
+        }
+        Log.w(TAG, "bedtime notice check ($why): next at $next")
     }
 
     /** "Got it" on a warning, shrink a full countdown, or expand the chip; then redraw at once. */
@@ -335,6 +387,7 @@ class LockAccessibilityService : AccessibilityService() {
         // Stop the relock timer and the screen receiver even if the session row was never saved.
         recheckJob?.cancel()
         heartbeatJob?.cancel()
+        bedtimeJob?.cancel()
         stopPill()
         _running.value = false
         if (receiverRegistered) {
@@ -352,6 +405,7 @@ class LockAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "LiveLock"
         private const val MIN_PILL_DELAY_MS = 50L
+        private const val BEDTIME_CHECK_THROTTLE_MS = 60_000L
 
         // True while the service runs in this process. Read by the off-time detection and,
         // later, by Settings' "Live lock" row.

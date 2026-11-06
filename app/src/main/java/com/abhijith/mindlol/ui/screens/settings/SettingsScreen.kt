@@ -1,6 +1,17 @@
 package com.abhijith.mindlol.ui.screens.settings
 
+import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
+import com.abhijith.mindlol.domain.WarningsAccess
+import com.abhijith.mindlol.domain.WarningsPermission
+import com.abhijith.mindlol.service.WarningNotifier
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.border
@@ -230,6 +241,7 @@ fun SettingsContent(
                 ),
                 onClick = onOpenUsageSettings
             )
+            WarningsRow()
 
             SectionLabel("KEEP TRACKING IN THE BACKGROUND", Modifier.revealOnEnter(9))
             BackgroundLimitsSection(onOpenAppSettings)
@@ -545,6 +557,66 @@ private fun PermissionRow(permission: PermissionInfo, onClick: (() -> Unit)? = n
         }
         Text(permission.status, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * "Warnings": the notification permission (Step 3, W3). Tap to ask (Android 13+); if Android won't
+ * show the dialog again, or notifications are off in system settings, the tap opens those settings.
+ * The pill needs no permission; this only covers the bedtime notification and the limit fallback.
+ */
+@Composable
+private fun WarningsRow() {
+    val context = LocalContext.current
+    val notifier = remember { WarningNotifier(context) }
+    var access by remember { mutableStateOf(notifier.access()) }
+    // Re-read when you come back from system settings.
+    LifecycleResumeEffect(Unit) {
+        access = notifier.access()
+        onPauseOrDispose { }
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notifier.ensureChannel()
+        access = notifier.access()
+        if (!granted) {
+            val activity = context.findActivity()
+            val canAskAgain = activity != null &&
+                ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)
+            if (WarningsPermission.openSettingsAfterDenial(canAskAgain)) openNotificationSettings(context)
+        }
+    }
+    PermissionRow(
+        permission = PermissionInfo(
+            name = "Warnings",
+            reason = "Bedtime in 15 min, and limit warnings. Needs the live lock",
+            status = WarningsPermission.status(access)
+        ),
+        onClick = {
+            if (access == WarningsAccess.ASK && Build.VERSION.SDK_INT >= WarningsPermission.RUNTIME_PERMISSION_SDK) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                openNotificationSettings(context)
+            }
+        }
+    )
+}
+
+/** MindLol's own notification settings page. */
+private fun openNotificationSettings(context: Context) {
+    try {
+        context.startActivity(
+            Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    } catch (e: Exception) {
+        Log.w("Settings", "Couldn't open notification settings", e)
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /**

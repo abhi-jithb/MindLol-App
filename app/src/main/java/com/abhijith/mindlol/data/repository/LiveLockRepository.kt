@@ -26,6 +26,8 @@ import com.abhijith.mindlol.domain.PeriodKind
 import com.abhijith.mindlol.domain.RulesSnapshot
 import com.abhijith.mindlol.domain.UnlockGrant
 import com.abhijith.mindlol.domain.UpcomingLock
+import com.abhijith.mindlol.domain.WarningPlanner
+import com.abhijith.mindlol.domain.WarningText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -39,6 +41,11 @@ import java.time.temporal.TemporalAdjusters
  * What the live lock service needs from the data layer: the decision for the app in front,
  * and recording its own sessions (for LOCK_DISABLED). Rules come only from saved snapshots.
  */
+/** A bedtime notification to show now ([notice]), or when to check again ([nextCheckAtMillis]). */
+data class BedtimeCheck(val notice: BedtimeNotice?, val nextCheckAtMillis: Long?)
+
+data class BedtimeNotice(val nightDate: LocalDate, val bedtimeMillis: Long, val text: String)
+
 /** Everything the lock screen shows, worked out once when it opens. */
 data class LockScreenInfo(
     val eventId: Long,
@@ -117,6 +124,30 @@ class LiveLockRepository(
             if (packageName in neverLockable) return@withContext null
             val f = facts(packageName, nowMillis)
             LiveLockDecider.upcomingLock(packageName, nowMillis, f.night, f.day, f.usedTodayMs, f.grants, neverLockable)
+        }
+
+    fun appName(packageName: String): String = appNames.labelFor(packageName)
+
+    /**
+     * The bedtime notification: [BedtimeCheck.notice] when it should show now (15 min before a saved
+     * night with locked apps, not yet shown for that night), and [BedtimeCheck.nextCheckAtMillis]
+     * when its window next opens. [appInFront] is named first if it's locked tonight.
+     */
+    suspend fun bedtimeCheck(appInFront: String?, shownForNight: LocalDate?, nowMillis: Long = System.currentTimeMillis()): BedtimeCheck =
+        withContext(Dispatchers.IO) {
+            val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+            val night = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+                .filter { it.kind == PeriodKind.NIGHT && it.startMillis > nowMillis }
+                .minByOrNull { it.startMillis }
+            if (night == null || !WarningPlanner.bedtimeNoticeDue(nowMillis, night, shownForNight)) {
+                return@withContext BedtimeCheck(null, WarningPlanner.bedtimeNoticeAt(nowMillis, night))
+            }
+            val names = night.lockedApps
+                .sortedWith(compareBy<String> { it != appInFront }.thenBy { appNames.labelFor(it).lowercase() })
+                .map { appNames.labelFor(it) }
+            val bedtime = Instant.ofEpochMilli(night.startMillis).atZone(zone).toLocalTime()
+            val text = WarningText.bedtimeNotification(night.startMillis - nowMillis, bedtime, names)
+            BedtimeCheck(BedtimeNotice(night.date, night.startMillis, text), null)
         }
 
     /** Saves a new session at connect time and returns its id. */

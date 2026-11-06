@@ -6,6 +6,10 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Warnings before a lock (Step 3, W3): "Bedtime in 15 min…" and, if the pill can't show,
+         "5 min left on <App>". Android 13+ asks you first, from Settings → Warnings. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Android 11+ hides other apps by default. This lets MindLol see apps that have a
          launcher icon, so usage can show "Instagram" instead of "com.instagram.android".
          Deliberately narrower than QUERY_ALL_PACKAGES. -->
