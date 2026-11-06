@@ -14,7 +14,9 @@ import java.time.LocalDate
  *       --es pkg com.instagram.android --es reason BEDTIME
  *
  * reason: BEDTIME (default) or LIMIT. The test lock screen writes nothing: no lock_event, no grant,
- * no cheat, so it never counts in stats or escalation. It's an invisible trampoline: it starts the
+ * no cheat, so it never counts in stats or escalation. Finishing all 5 steps opens the app without
+ * a grant: if the app is really locked right now, the live lock covers it again (a real lock screen).
+ * It's an invisible trampoline: it starts the
  * lock screen and closes itself straight away. (`am start` rather than `am broadcast`: since
  * Android 10 a broadcast receiver can't open a screen while the app is in the background.)
  */

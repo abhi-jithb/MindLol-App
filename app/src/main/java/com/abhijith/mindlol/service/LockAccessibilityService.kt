@@ -1,10 +1,16 @@
 package com.abhijith.mindlol.service
 
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import androidx.core.content.ContextCompat
 import com.abhijith.mindlol.MindLolApplication
 import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.domain.LiveLockDecider
@@ -43,6 +49,10 @@ class LockAccessibilityService : AccessibilityService() {
     private var sessionId: Long? = null
     private var heartbeatJob: Job? = null
     private var lastPackage: String? = null
+    private var recheckJob: Job? = null
+    // True while our lock screen covers lastPackage.
+    private var lockShowing = false
+    private var receiverRegistered = false
     // Apps and the home screen; null until worked out (it lists installed apps, so it runs off the main thread).
     private var tracked: Set<String>? = null
 
@@ -60,6 +70,12 @@ class LockAccessibilityService : AccessibilityService() {
             heartbeatJob = launch { heartbeatLoop(id) }
         }
         scope.launch(Dispatchers.IO) { tracked = repository.trackedPackages() }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+        }
+        ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        receiverRegistered = true
     }
 
     /** Every 5 minutes: write the heartbeat if a night with locks or a day with limits is running. */
@@ -76,17 +92,73 @@ class LockAccessibilityService : AccessibilityService() {
         // Only apps and the home screen count; overlays (keyboard, status bar, Vivo gestures) are ignored.
         val known = tracked
         if (known != null && pkg !in known) return
-        if (pkg == lastPackage) return // the same app, still in front
+        // Our own lock screen: the covered app stays "in front" (lastPackage), so it's checked again
+        // when the lock closes without a grant (screen off) or when the app comes back.
+        if (pkg == packageName && event.className?.toString() == LockActivity::class.java.name) {
+            lockShowing = true
+            recheckJob?.cancel()
+            return
+        }
+        // The same app, still in front. After a lock screen it's decided again (a grant may now exist).
+        if (pkg == lastPackage && !lockShowing) return
+        lockShowing = false
         lastPackage = pkg
-        scope.launch {
-            when (val decision = repository.decide(pkg)) {
-                is LockDecision.Lock -> {
-                    Log.w(TAG, "LOCK $pkg (${decision.reason}, period ${decision.periodDate})")
-                    // Allowed from the background because the system has bound this accessibility service.
-                    startActivity(LockActivity.intent(this@LockAccessibilityService, pkg, decision.reason, decision.periodDate))
-                }
-                is LockDecision.Allow -> Log.w(TAG, "allow $pkg, recheck at ${decision.recheckAtMillis}")
+        // A new app is in front: any timer for the previous one no longer applies.
+        recheckJob?.cancel()
+        scope.launch { decideAndAct(pkg, "opened") }
+    }
+
+    /**
+     * Asks for a decision and acts on it. On Allow with a recheck time (a grant ends, bedtime
+     * starts, a limit is reached), a timer asks again at that moment if the app is still in front:
+     * that's how an app you keep open gets locked again when its unlock time runs out.
+     */
+    private suspend fun decideAndAct(pkg: String, why: String) {
+        when (val decision = repository.decide(pkg)) {
+            is LockDecision.Lock -> {
+                Log.w(TAG, "LOCK $pkg (${decision.reason}, period ${decision.periodDate}, $why)")
+                // Allowed from the background because the system has bound this accessibility service.
+                startActivity(LockActivity.intent(this@LockAccessibilityService, pkg, decision.reason, decision.periodDate))
             }
+            is LockDecision.Allow -> {
+                val at = decision.recheckAtMillis
+                Log.w(TAG, "allow $pkg ($why), recheck at $at")
+                if (at != null) scheduleRecheck(pkg, at)
+            }
+        }
+    }
+
+    private fun scheduleRecheck(pkg: String, atMillis: Long) {
+        recheckJob?.cancel()
+        recheckJob = scope.launch {
+            delay(LiveLockDecider.recheckDelayMillis(atMillis, System.currentTimeMillis()))
+            if (lastPackage != pkg) return@launch // you moved on; the next open decides afresh
+            // Screen off or still on the lock screen of the phone: wait for "unlocked" (see screenReceiver).
+            if (!isUsable()) {
+                Log.w(TAG, "recheck $pkg deferred: screen off or phone locked")
+                return@launch
+            }
+            decideAndAct(pkg, "time up")
+        }
+    }
+
+    /** The screen is on and past the phone's own lock screen, so a lock screen can actually be seen. */
+    private fun isUsable(): Boolean =
+        getSystemService(PowerManager::class.java)?.isInteractive == true &&
+            getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != true
+
+    /**
+     * Timers don't run while the phone sleeps, and a grant often runs out with the screen off.
+     * When you unlock the phone (USER_PRESENT), or turn the screen on with no phone lock
+     * (SCREEN_ON), the app still in front is checked again, so it can't stay open past its time.
+     * System broadcasts: no permission needed, and registered only while the service runs.
+     */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = lastPackage ?: return
+            if (intent.action == Intent.ACTION_SCREEN_ON && !isUsable()) return // USER_PRESENT will follow
+            recheckJob?.cancel()
+            scope.launch { decideAndAct(pkg, "screen back on") }
         }
     }
 
@@ -109,6 +181,12 @@ class LockAccessibilityService : AccessibilityService() {
     }
 
     private fun recordStop(why: String) {
+        // Stop the relock timer and the screen receiver even if the session row was never saved.
+        recheckJob?.cancel()
+        if (receiverRegistered) {
+            receiverRegistered = false
+            runCatching { unregisterReceiver(screenReceiver) }
+        }
         val id = sessionId ?: return
         sessionId = null // record once, even though both onUnbind and onDestroy run
         _running.value = false

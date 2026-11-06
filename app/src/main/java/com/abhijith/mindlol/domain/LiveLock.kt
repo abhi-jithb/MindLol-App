@@ -143,6 +143,16 @@ object LiveLockDecider {
     }
 
     /**
+     * How long the live lock waits before asking again about the app in front. Never negative,
+     * and at least [MIN_RECHECK_DELAY_MS], so a recheck time that's already passed (or a clock
+     * change) can't make it ask in a tight loop.
+     */
+    fun recheckDelayMillis(recheckAtMillis: Long, nowMillis: Long): Long =
+        (recheckAtMillis - nowMillis).coerceAtLeast(MIN_RECHECK_DELAY_MS)
+
+    const val MIN_RECHECK_DELAY_MS = 500L
+
+    /**
      * Step 1's countdown before "I want to cheat" unlocks: 10 s, doubling with every unlock
      * already granted since the count last reset, capped at 320 s.
      */

@@ -11,6 +11,7 @@ import com.abhijith.mindlol.domain.LockOutcome
 import com.abhijith.mindlol.domain.LockReason
 import com.abhijith.mindlol.domain.LockStep
 import com.abhijith.mindlol.domain.UnlockSteps
+import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,11 +19,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
-/**
- * Which screen of the unlock flow is showing. GRANT_NOT_BUILT_YET is temporary: the grant
- * (actually opening the app) arrives in item 8.
- */
-enum class LockScreenStep { STARE, CONFESSION, INTERROGATION, BARGAIN, LAST_CHANCE, GRANT_NOT_BUILT_YET }
+/** Which screen of the unlock flow is showing. */
+enum class LockScreenStep { STARE, CONFESSION, INTERROGATION, BARGAIN, LAST_CHANCE }
 
 data class LockUiState(
     val info: LockScreenInfo? = null,
@@ -134,13 +132,23 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
     }
 
     /**
-     * Step 5: the button was held for the full 3 seconds. The grant (opening the app for the
-     * chosen minutes) comes in item 8; until then this only shows that the steps are done.
+     * Step 5: the button was held for the full 3 seconds. Saves the grant first, then calls
+     * [onUnlocked] so the lock screen closes and the app opens. The order matters: the live lock
+     * must find the grant when the app comes back to the front, or it would lock it again.
+     * A test lock screen saves nothing and still opens the app.
      */
-    fun holdCompleted() {
+    fun holdCompleted(onUnlocked: (packageName: String) -> Unit) {
         val s = _state.value
-        if (s.step != LockScreenStep.LAST_CHANCE || s.minutes == null) return
-        _state.update { it.copy(step = LockScreenStep.GRANT_NOT_BUILT_YET) }
+        val info = s.info ?: return
+        val minutes = s.minutes ?: return
+        if (s.step != LockScreenStep.LAST_CHANCE || finished) return
+        finished = true // from here, leaving can't overwrite UNLOCKED with LEFT
+        openedFor = null
+        viewModelScope.launch {
+            val saved = repository.grant(info.eventId, minutes)
+            Log.w(TAG, if (saved) "UNLOCKED ${info.packageName} for $minutes min" else "Unlock of ${info.packageName} not saved (test lock screen or already closed)")
+            onUnlocked(info.packageName)
+        }
     }
 
     /** "Go back to sleep" or the back button. */
@@ -155,5 +163,9 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         finished = true
         openedFor = null
         viewModelScope.launch { repository.endLockScreen(info.eventId, outcome) }
+    }
+
+    private companion object {
+        const val TAG = "LiveLock"
     }
 }

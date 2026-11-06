@@ -28,6 +28,17 @@ interface LockDao {
     @Query("UPDATE lock_event SET outcome = :outcome WHERE id = :id")
     suspend fun setOutcome(id: Long, outcome: LockOutcome)
 
+    /**
+     * Step 5 finished: the attempt becomes a grant. The app may be used for [minutes] from [at].
+     * Only an attempt still open (LEFT, the default) can become UNLOCKED, so a screen you already
+     * gave up on can never turn into a grant.
+     */
+    @Query(
+        "UPDATE lock_event SET outcome = 'UNLOCKED', grantedMinutes = :minutes, grantedAtMillis = :at, " +
+            "stepReached = MAX(stepReached, 5) WHERE id = :id AND outcome = 'LEFT'"
+    )
+    suspend fun grant(id: Long, minutes: Int, at: Long): Int
+
     /** Step 3 showed this card. Saved when shown, so leaving before answering still counts. */
     @Query("UPDATE lock_event SET cardId = :cardId WHERE id = :id")
     suspend fun setCard(id: Long, cardId: String)

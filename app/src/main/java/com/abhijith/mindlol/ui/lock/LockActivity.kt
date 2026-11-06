@@ -42,7 +42,7 @@ class LockActivity : ComponentActivity() {
             val container = (application as MindLolApplication).container
             val settings by container.settingsRepository.settings.collectAsState(initial = null)
             MindLolTheme(theme = settings?.theme ?: AppTheme.PURE_BLACK) {
-                LockScreen(viewModel = viewModel, onGoBackToSleep = ::goBackToSleep)
+                LockScreen(viewModel = viewModel, onGoBackToSleep = ::goBackToSleep, onUnlocked = ::openUnlockedApp)
             }
         }
     }
@@ -78,6 +78,16 @@ class LockActivity : ComponentActivity() {
     private fun goBackToSleep() {
         viewModel.goBack()
         startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        finish()
+    }
+
+    /**
+     * All five steps done and the grant saved: close the lock and bring the app back. Its launch
+     * intent brings its existing task to the front, so you land where you were.
+     */
+    private fun openUnlockedApp(packageName: String) {
+        if (isFinishing) return // already left (Home, screen off) while the grant was being saved
+        packageManager.getLaunchIntentForPackage(packageName)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         finish()
     }
 

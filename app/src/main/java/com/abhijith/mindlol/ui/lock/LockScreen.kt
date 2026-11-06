@@ -70,7 +70,7 @@ import com.abhijith.mindlol.ui.theme.Motion
 import kotlinx.coroutines.delay
 
 @Composable
-fun LockScreen(viewModel: LockViewModel, onGoBackToSleep: () -> Unit) {
+fun LockScreen(viewModel: LockViewModel, onGoBackToSleep: () -> Unit, onUnlocked: (packageName: String) -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     // .background before the inset padding, so the black reaches behind the status and nav bars.
     Column(
@@ -94,8 +94,7 @@ fun LockScreen(viewModel: LockViewModel, onGoBackToSleep: () -> Unit) {
                 LockScreenStep.CONFESSION -> ConfessionStep(info, viewModel, onGoBackToSleep)
                 LockScreenStep.INTERROGATION -> InterrogationStep(info, state, viewModel, onGoBackToSleep)
                 LockScreenStep.BARGAIN -> BargainStep(info, viewModel, onGoBackToSleep)
-                LockScreenStep.LAST_CHANCE -> LastChanceStep(info, state.minutes ?: 0, viewModel::holdCompleted, onGoBackToSleep)
-                LockScreenStep.GRANT_NOT_BUILT_YET -> GrantNotBuiltYet(onGoBackToSleep)
+                LockScreenStep.LAST_CHANCE -> LastChanceStep(info, state.minutes ?: 0, { viewModel.holdCompleted(onUnlocked) }, onGoBackToSleep)
             }
         }
     }
@@ -234,23 +233,6 @@ private fun LastChanceStep(info: LockScreenInfo, minutes: Int, onHoldCompleted: 
         Spacer(Modifier.weight(1f))
         HoldButton(label = "Hold to open ${info.appName} for $minutes min", onDone = onHoldCompleted)
         Spacer(Modifier.height(8.dp))
-        GoBackButton(onGoBackToSleep)
-    }
-}
-
-/** All five steps done. Temporary: the grant (opening the app) arrives in item 8. */
-@Composable
-private fun GrantNotBuiltYet(onGoBackToSleep: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.HEAD_SHAKE, size = 160.dp)
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "All five steps done. Opening the app isn't built yet, so there's still no way in.",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.weight(1f))
         GoBackButton(onGoBackToSleep)
     }
 }

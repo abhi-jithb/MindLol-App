@@ -184,6 +184,16 @@ class LiveLockRepository(
         }
     }
 
+    /**
+     * Step 5 done: saves the grant (outcome UNLOCKED, minutes, granted at now). The live lock
+     * reads it on the next decision for this app, and it raises the next countdown (escalation).
+     * Returns false for a test lock screen (nothing saved) or if the row was no longer open.
+     */
+    suspend fun grant(eventId: Long, minutes: Int, nowMillis: Long = System.currentTimeMillis()): Boolean =
+        withContext(Dispatchers.IO) {
+            if (eventId == TEST_EVENT_ID) false else lockDao.grant(eventId, minutes, nowMillis) == 1
+        }
+
     suspend fun answerCard(eventId: Long, answerLabel: String) = withContext(Dispatchers.IO) {
         if (eventId != TEST_EVENT_ID) lockDao.setCardAnswer(eventId, answerLabel)
     }
