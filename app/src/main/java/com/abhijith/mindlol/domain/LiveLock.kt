@@ -143,6 +143,50 @@ object LiveLockDecider {
     }
 
     /**
+     * If [packageName] stays in front from [nowMillis], when will it lock, and why?
+     * Follows [decide]'s recheck times one after another (bedtime starts, the limit is reached,
+     * a grant ends), adding the passing time to today's usage, until one of them is a Lock.
+     *
+     * Null when it's already locked, never lockable, or nothing in the given snapshots would lock it
+     * (for example a grant that ends after wake time). [maxSteps] stops a runaway loop.
+     */
+    fun upcomingLock(
+        packageName: String,
+        nowMillis: Long,
+        night: RulesSnapshot?,
+        today: RulesSnapshot?,
+        usedTodayMs: Long,
+        grants: List<UnlockGrant>,
+        neverLockable: Set<String>,
+        maxSteps: Int = 6
+    ): UpcomingLock? {
+        val first = decide(packageName, nowMillis, night, today, usedTodayMs, grants, neverLockable)
+        var at = (first as? LockDecision.Allow)?.recheckAtMillis ?: return null
+        repeat(maxSteps) {
+            if (at <= nowMillis) return null
+            // The app stayed in front the whole time, so its usage grew by the same amount.
+            val used = usedTodayMs + (at - nowMillis)
+            when (val d = decide(packageName, at, night, today, used, grants, neverLockable)) {
+                is LockDecision.Lock -> {
+                    val grantEnded = grants.any { it.packageName == packageName && it.endsAtMillis == at }
+                    val cause = when {
+                        grantEnded -> LockCause.GRANT_END
+                        d.reason == LockReason.BEDTIME -> LockCause.BEDTIME
+                        else -> LockCause.LIMIT
+                    }
+                    return UpcomingLock(at, d.reason, cause)
+                }
+                is LockDecision.Allow -> {
+                    val next = d.recheckAtMillis ?: return null
+                    if (next <= at) return null // no progress: stop rather than loop
+                    at = next
+                }
+            }
+        }
+        return null
+    }
+
+    /**
      * How long the live lock waits before asking again about the app in front. Never negative,
      * and at least [MIN_RECHECK_DELAY_MS], so a recheck time that's already passed (or a clock
      * change) can't make it ask in a tight loop.
