@@ -41,7 +41,7 @@ class InterrogationCardsTest {
     fun newCards_wordForWord() {
         fun card(id: String) = cards.single { it.id == id }
         assertEquals("Is this video going to change your life?", card("video").question)
-        assertEquals("It's the 40th one tonight. None of them did.", card("video").answers[0].reply)
+        assertEquals("None of the videos tonight did.", card("video").answers[0].reply)
         assertEquals("Then close it.", card("video").answers[1].reply)
         assertEquals("Will you remember this reel tomorrow?", card("reel").question)
         assertEquals("Name the last one you watched. Exactly.", card("reel").answers[0].reply)
@@ -94,5 +94,36 @@ class InterrogationCardsTest {
     fun sameSeed_sameCard() {
         val a = InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), 1_793_873_924_724L)
         repeat(3) { assertEquals(a, InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), 1_793_873_924_724L)) }
+    }
+
+    /** No fake facts: no invented numbers in any question or reply (answer labels like "1+" are choices). */
+    @Test
+    fun noQuestionOrReplyContainsAHardCodedNumber() {
+        cards.forEach { card ->
+            assertFalse(card.question, card.question.any(Char::isDigit))
+            card.answers.forEach { assertFalse(it.reply, it.reply.any(Char::isDigit)) }
+        }
+    }
+
+    @Test
+    fun videoCard_usesTheRewordedReply() {
+        val yes = cards.first { it.id == "video" }.answers.first { it.label == "Yes" }
+        assertEquals("None of the videos tonight did.", yes.reply)
+    }
+
+    /** Replies about sleep or tonight never show on a daytime limit lock. */
+    @Test
+    fun nightOnlyCards_neverPickedForALimitLock_andEveryNightWordedCardIsMarked() {
+        val night = Regex("sleep|asleep|tonight|bedtime", RegexOption.IGNORE_CASE)
+        cards.forEach { card ->
+            if (card.answers.any { night.containsMatchIn(it.reply) }) assertTrue("${card.id} must be nightOnly", card.nightOnly)
+        }
+        val nightIds = cards.filter { it.nightOnly }.map { it.id }.toSet()
+        (0L..60L).forEach { seed ->
+            val picked = InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), seed, reason = LockReason.LIMIT)
+            assertTrue(picked?.id !in nightIds)
+        }
+        val atNight = (0L..60L).mapNotNull { InterrogationCards.pick(RoastIntensity.PERSONAL, emptyList(), it, reason = LockReason.BEDTIME)?.id }.toSet()
+        assertTrue(atNight.any { it in nightIds })
     }
 }

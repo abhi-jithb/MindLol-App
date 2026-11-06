@@ -54,7 +54,14 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
      * Opens the lock for an app. Calling it again for the same app (e.g. after rotation) does nothing.
      * [test]: a debug test lock screen that writes nothing (see LiveLockRepository.openLockScreen).
      */
-    fun open(packageName: String, reason: LockReason, periodDate: LocalDate, test: Boolean = false) {
+    fun open(
+        packageName: String,
+        reason: LockReason,
+        periodDate: LocalDate,
+        test: Boolean = false,
+        testStartAt: LockScreenStep? = null,
+        testAnswer: Int = -1
+    ) {
         val key = Triple(packageName, reason, periodDate) to test
         if (openedFor == key) return
         openedFor = key
@@ -63,6 +70,16 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         viewModelScope.launch {
             val info = repository.openLockScreen(packageName, reason, periodDate, test = test)
             _state.value = LockUiState(info = info, step = LockScreenStep.STARE, countdownLeft = info.countdownSeconds)
+            // Debug screenshots only: a test lock (writes nothing) can open straight at a later step.
+            if (test && testStartAt != null && testStartAt != LockScreenStep.STARE) {
+                val answer = info.card?.answers?.getOrNull(testAnswer)
+                _state.value = LockUiState(
+                    info = info, step = testStartAt, countdownLeft = 0,
+                    answer = answer.takeIf { testStartAt == LockScreenStep.INTERROGATION },
+                    minutes = UnlockSteps.BARGAIN_MINUTES[1]
+                )
+                return@launch
+            }
             while (_state.value.countdownLeft > 0) {
                 delay(1_000)
                 _state.update { it.copy(countdownLeft = (it.countdownLeft - 1).coerceAtLeast(0)) }

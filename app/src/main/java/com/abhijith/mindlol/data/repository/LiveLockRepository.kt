@@ -170,7 +170,7 @@ class LiveLockRepository(
             confessionLine = RoastGenerator.stepLine(LockStep.CONFESSION, context).orEmpty(),
             requiredConfession = Confession.required(appName, reason),
             // Reading which cards were shown is fine in a test lock screen; only writes are skipped.
-            card = InterrogationCards.pick(settings.roastIntensity, lockDao.cardsShown(periodDate, reason), seed = nowMillis),
+            card = InterrogationCards.pick(settings.roastIntensity, lockDao.cardsShown(periodDate, reason), seed = nowMillis, reason = reason),
             bargainLine = RoastGenerator.stepLine(LockStep.BARGAIN, context).orEmpty(),
             lastChanceLine = RoastGenerator.stepLine(LockStep.LAST_CHANCE, context).orEmpty()
         )

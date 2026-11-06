@@ -69,7 +69,10 @@ class LockActivity : ComponentActivity() {
         val date = intent.getStringExtra(EXTRA_PERIOD)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return finish()
         // A test lock screen is only honoured in a debuggable (debug) build; release ignores the flag.
         val test = intent.getBooleanExtra(EXTRA_TEST, false) && isDebuggable()
-        viewModel.open(pkg, reason, date, test)
+        // Test only: open straight at a step, for screenshots. Ignored on a real lock screen.
+        val startAt = if (test) intent.getStringExtra(EXTRA_TEST_STEP)?.let { runCatching { LockScreenStep.valueOf(it) }.getOrNull() } else null
+        val answer = if (test) intent.getIntExtra(EXTRA_TEST_ANSWER, -1) else -1
+        viewModel.open(pkg, reason, date, test, startAt, answer)
     }
 
     private fun isDebuggable(): Boolean = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
@@ -96,6 +99,8 @@ class LockActivity : ComponentActivity() {
         private const val EXTRA_REASON = "reason"
         private const val EXTRA_PERIOD = "period"
         private const val EXTRA_TEST = "test"
+        const val EXTRA_TEST_STEP = "testStep"
+        const val EXTRA_TEST_ANSWER = "testAnswer"
 
         /** [test] = a debug test lock screen that writes nothing; only honoured in debug builds. */
         fun intent(context: Context, packageName: String, reason: LockReason, periodDate: LocalDate, test: Boolean = false): Intent =

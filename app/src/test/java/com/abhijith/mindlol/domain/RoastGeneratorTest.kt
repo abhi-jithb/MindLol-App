@@ -144,7 +144,24 @@ class RoastGeneratorTest {
     fun stareLine_matchesTheLockReason() {
         assertEquals(RoastPool.STEP_STARE_BEDTIME, RoastGenerator.stepPool(LockStep.STARE, CheatType.BEDTIME, RoastIntensity.SAVAGE))
         assertEquals(RoastPool.STEP_STARE_LIMIT, RoastGenerator.stepPool(LockStep.STARE, CheatType.LIMIT, RoastIntensity.PERSONAL))
-        assertEquals(RoastPool.MILD_STEP_STARE, RoastGenerator.stepPool(LockStep.STARE, CheatType.LIMIT, RoastIntensity.MILD))
+        assertEquals(RoastPool.MILD_STEP_STARE_LIMIT, RoastGenerator.stepPool(LockStep.STARE, CheatType.LIMIT, RoastIntensity.MILD))
+        assertEquals(RoastPool.MILD_STEP_STARE, RoastGenerator.stepPool(LockStep.STARE, CheatType.BEDTIME, RoastIntensity.MILD))
+    }
+
+    /** No fake facts: a daytime limit lock never talks about bedtime, sleep or tonight. */
+    @Test
+    fun limitLockScreen_neverMentionsNight() {
+        val night = Regex("bedtime|sleep|tonight|\\{bed\\}|\\{wake\\}", RegexOption.IGNORE_CASE)
+        for (intensity in RoastIntensity.entries) for (step in LockStep.entries) {
+            val pool = RoastGenerator.stepPool(step, CheatType.LIMIT, intensity) ?: continue
+            RoastLines.lines.getValue(pool).forEach { assertFalse("$pool: $it", night.containsMatchIn(it)) }
+        }
+    }
+
+    /** No fake facts: no invented numbers. Every number on screen comes from a {placeholder}. */
+    @Test
+    fun noLineContainsAHardCodedNumber() {
+        RoastLines.lines.forEach { (pool, lines) -> lines.forEach { assertFalse("$pool: $it", it.any(Char::isDigit)) } }
     }
 
     @Test

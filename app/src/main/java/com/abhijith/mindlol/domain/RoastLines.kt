@@ -43,6 +43,7 @@ enum class RoastPool {
     STEP_BARGAIN,
     STEP_LAST_CHANCE,
     MILD_STEP_STARE,
+    MILD_STEP_STARE_LIMIT,
     MILD_STEP_CONFESSION,
     MILD_STEP_BARGAIN,
     MILD_STEP_LAST_CHANCE
@@ -162,11 +163,14 @@ object RoastLines {
         RoastPool.STEP_LAST_CHANCE to listOf(
             "Hold it. Three seconds to change your mind.",
             "Last chance. I'm not watching this.",
-            "Hold the button. Or don't, and sleep."
+            "Hold the button. Or let go and keep your own rule."
         ),
         RoastPool.MILD_STEP_STARE to listOf(
             "It's {time}, past your {bed} bedtime. Maybe tomorrow?",
             "This is your own rule. Want to keep it?"
+        ),
+        RoastPool.MILD_STEP_STARE_LIMIT to listOf(
+            "Your {app} limit for today is used up. Want to keep it?"
         ),
         RoastPool.MILD_STEP_CONFESSION to listOf(
             "If you're sure, type it out."

@@ -94,6 +94,7 @@ object RoastGenerator {
         val mild = intensity == RoastIntensity.MILD
         return when (step) {
             LockStep.STARE -> when {
+                mild && type == CheatType.LIMIT -> RoastPool.MILD_STEP_STARE_LIMIT
                 mild -> RoastPool.MILD_STEP_STARE
                 type == CheatType.LIMIT -> RoastPool.STEP_STARE_LIMIT
                 else -> RoastPool.STEP_STARE_BEDTIME

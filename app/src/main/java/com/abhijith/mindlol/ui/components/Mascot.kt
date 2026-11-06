@@ -27,10 +27,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -146,14 +151,15 @@ private fun faceFor(reaction: MascotReaction): Face? = when (reaction) {
  */
 private data class Arms(
     val visible: Float,  // 0 = no arms (plain moods)
-    val crossed: Float,  // STARE: both hands over the belly
+    val crossed: Float,  // unused since the polish: STARE has no arms (they read as a chin strap)
     val palm: Float,     // FACEPALM: right hand over the eyes
     val hips: Float      // TURN_AWAY: hands on hips
 )
 
 private fun armsFor(reaction: MascotReaction): Arms = when (reaction) {
     MascotReaction.NONE -> Arms(0f, 0f, 0f, 0f)
-    MascotReaction.STARE -> Arms(1f, 1f, 0f, 0f)
+    // No arms: crossed arms on a round body read as a strap across the chin. The stern, still face says it.
+    MascotReaction.STARE -> Arms(0f, 0f, 0f, 0f)
     MascotReaction.FACEPALM -> Arms(1f, 0f, 1f, 0f)
     MascotReaction.HEAD_SHAKE, MascotReaction.NOD -> Arms(1f, 0f, 0f, 0f)
     MascotReaction.TURN_AWAY -> Arms(1f, 0f, 0f, 1f)
@@ -465,21 +471,53 @@ private fun DrawScope.drawArms(cx: Float, cy: Float, r: Float, eyeY: Float, fx: 
         }
         drawPath(arm, White, alpha = arms.visible, style = line)
 
-        // The right hand grows into a flat palm wide enough to cover both eyes, fingers up.
+        // The right hand becomes one clean palm silhouette over both eyes (see drawPalm);
+        // every other hand stays a small round hand.
         val cover = if (side > 0) arms.palm else 0f
-        val w = handR * (2f + cover * 8f)
-        val h = handR * (2f + cover * 1.6f)
-        val topLeft = Offset(hand.x - w / 2, hand.y - h / 2)
-        drawOval(Black, topLeft, Size(w, h), alpha = arms.visible)
-        drawOval(White, topLeft, Size(w, h), alpha = arms.visible, style = line)
-        if (cover > 0.5f) {
-            val a = (cover - 0.5f) * 2f * arms.visible
-            for (i in -1..1) {
-                val x = hand.x + i * w * 0.22f
-                drawLine(White, Offset(x, hand.y - h * 0.15f), Offset(x, hand.y - h * 0.5f - handR * 0.9f), stroke, StrokeCap.Round, alpha = a)
-            }
+        if (cover > 0.3f) {
+            drawPalm(hand, r, stroke, scale = 0.4f + 0.6f * cover, alpha = arms.visible)
+        } else {
+            val topLeft = Offset(hand.x - handR, hand.y - handR)
+            drawOval(Black, topLeft, Size(handR * 2, handR * 2), alpha = arms.visible)
+            drawOval(White, topLeft, Size(handR * 2, handR * 2), alpha = arms.visible, style = line)
         }
     }
+}
+
+/**
+ * FACEPALM's hand: a rounded palm wide enough to cover both eyes, four short fingers on top and a
+ * thumb at the lower left, merged into ONE outline (Path union), so there are no lines inside it.
+ * Black fill hides the eyes; the white outline matches the body. [center] is the palm's middle.
+ */
+private fun DrawScope.drawPalm(center: Offset, r: Float, stroke: Float, scale: Float, alpha: Float) {
+    val palmW = r * 1.2f * scale // wide enough to hide both eyes and both brow tips
+    val palmH = r * 0.42f * scale
+    val corner = CornerRadius(r * 0.16f * scale)
+    val palmTop = center.y - palmH / 2
+    var shape = Path().apply {
+        addRoundRect(RoundRect(Rect(center.x - palmW / 2, palmTop, center.x + palmW / 2, center.y + palmH / 2), corner))
+    }
+    // Four fingers, a little apart, the middle two slightly longer.
+    // Long, slim fingers with clear gaps, so it reads as an open hand, not a fist.
+    val fingerW = palmW * 0.165f
+    val gap = (palmW * 0.9f - fingerW * 4) / 3
+    val startX = center.x - palmW * 0.45f
+    val lengths = listOf(0.36f, 0.45f, 0.43f, 0.33f)
+    lengths.forEachIndexed { i, len ->
+        val left = startX + i * (fingerW + gap)
+        val finger = Path().apply {
+            addRoundRect(RoundRect(Rect(left, palmTop - r * len * scale, left + fingerW, palmTop + palmH * 0.4f), CornerRadius(fingerW / 2)))
+        }
+        shape = Path.combine(PathOperation.Union, shape, finger)
+    }
+    // Thumb, sticking out toward the middle of the face at the bottom left.
+    val thumb = Path().apply {
+        val top = center.y + palmH * 0.05f
+        addRoundRect(RoundRect(Rect(center.x - palmW / 2 - r * 0.24f * scale, top, center.x - palmW * 0.3f, top + palmH * 0.5f), CornerRadius(palmH * 0.25f)))
+    }
+    shape = Path.combine(PathOperation.Union, shape, thumb)
+    drawPath(shape, Black, alpha = alpha)
+    drawPath(shape, White, alpha = alpha, style = Stroke(width = stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 private fun lerp(a: Offset, b: Offset, t: Float): Offset = Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)

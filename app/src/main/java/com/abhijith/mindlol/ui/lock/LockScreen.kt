@@ -9,12 +9,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
@@ -100,63 +103,86 @@ fun LockScreen(viewModel: LockViewModel, onGoBackToSleep: () -> Unit, onUnlocked
     }
 }
 
+/**
+ * Every step's layout: the mascot and its text sit together, centered in the space above the
+ * buttons (not stuck to the top with an empty middle). The buttons stay at the bottom.
+ */
+@Composable
+private fun StepLayout(middle: @Composable ColumnScope.() -> Unit, bottom: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            content = middle
+        )
+        Spacer(Modifier.height(16.dp))
+        bottom()
+    }
+}
+
 /** Step 1: the mascot stares; the big way out is white, the small way in is gray and waits. */
 @Composable
 private fun StareStep(info: LockScreenInfo, countdownLeft: Int, onGoBackToSleep: () -> Unit, onWantToCheat: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.STARE, size = 200.dp)
-        Spacer(Modifier.height(32.dp))
-        Text(info.stareLine, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
-        Spacer(Modifier.weight(1f))
-        GoBackButton(onGoBackToSleep)
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onWantToCheat, enabled = countdownLeft == 0) {
-            Text(
-                if (countdownLeft > 0) "I want to cheat ($countdownLeft s)" else "I want to cheat",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+    StepLayout(
+        middle = {
+            Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.STARE, size = 200.dp)
+            Spacer(Modifier.height(32.dp))
+            Text(info.stareLine, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+        },
+        bottom = {
+            GoBackButton(onGoBackToSleep)
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onWantToCheat, enabled = countdownLeft == 0) {
+                Text(
+                    if (countdownLeft > 0) "I want to cheat ($countdownLeft s)" else "I want to cheat",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
-    }
+    )
 }
 
 /** Step 2: type the sentence yourself. Paste, suggestions and swipe-typing are all refused. */
 @Composable
 private fun ConfessionStep(info: LockScreenInfo, viewModel: LockViewModel, onGoBackToSleep: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(16.dp))
-        Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.FACEPALM, size = 140.dp)
-        Spacer(Modifier.height(16.dp))
-        Text(info.confessionLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        Text("Type exactly:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "\"${info.requiredConfession}\"",
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(16.dp))
-        OutlinedTextField(
-            state = viewModel.confession,
-            inputTransformation = TypedOnly,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.None,
-                autoCorrectEnabled = false,
-                keyboardType = KeyboardType.Ascii
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = viewModel::confess,
-            enabled = viewModel.confessionMatches(),
-            modifier = Modifier.fillMaxWidth().height(56.dp)
-        ) { Text("Confess") }
-        Spacer(Modifier.height(8.dp))
-        GoBackButton(onGoBackToSleep)
-    }
+    StepLayout(
+        middle = {
+            Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.FACEPALM, size = 140.dp)
+            Spacer(Modifier.height(16.dp))
+            Text(info.confessionLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            Text("Type exactly:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "\"${info.requiredConfession}\"",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                state = viewModel.confession,
+                inputTransformation = TypedOnly,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.None,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        bottom = {
+            Button(
+                onClick = viewModel::confess,
+                enabled = viewModel.confessionMatches(),
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) { Text("Confess") }
+            Spacer(Modifier.height(8.dp))
+            GoBackButton(onGoBackToSleep)
+        }
+    )
 }
 
 /**
@@ -167,75 +193,88 @@ private fun ConfessionStep(info: LockScreenInfo, viewModel: LockViewModel, onGoB
 private fun InterrogationStep(info: LockScreenInfo, state: LockUiState, viewModel: LockViewModel, onGoBackToSleep: () -> Unit) {
     val card = info.card ?: return
     val answer = state.answer
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(16.dp))
-        Mascot(mood = MascotMood.NEUTRAL, reaction = answer?.reaction?.toMascot() ?: MascotReaction.NONE, size = 140.dp)
-        Spacer(Modifier.height(24.dp))
-        Text(card.question, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        if (answer == null) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                card.answers.forEachIndexed { index, option ->
-                    SpringIn(index, Modifier.weight(1f)) {
-                        OutlinedButton(onClick = { viewModel.answer(option) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                            Text(option.label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
+    StepLayout(
+        middle = {
+            Mascot(mood = MascotMood.NEUTRAL, reaction = answer?.reaction?.toMascot() ?: MascotReaction.NONE, size = 140.dp)
+            Spacer(Modifier.height(24.dp))
+            Text(card.question, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            // Same height before and after answering, so the block doesn't jump when the reply replaces the buttons.
+            Box(Modifier.fillMaxWidth().heightIn(min = 72.dp), contentAlignment = Alignment.TopCenter) {
+                if (answer == null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        card.answers.forEachIndexed { index, option ->
+                            SpringIn(index, Modifier.weight(1f)) { ChoiceButton(option.label) { viewModel.answer(option) } }
                         }
                     }
+                } else {
+                    TypedReply(
+                        text = InterrogationCards.reply(answer, info.appName),
+                        alreadyTyped = state.replyTyped,
+                        onFinished = viewModel::replyFinished
+                    )
                 }
             }
-        } else {
-            TypedReply(
-                text = InterrogationCards.reply(answer, info.appName),
-                alreadyTyped = state.replyTyped,
-                onFinished = viewModel::replyFinished
-            )
+        },
+        bottom = {
+            if (answer != null && state.replyTyped) {
+                Button(onClick = viewModel::continueAfterReply, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Continue") }
+                Spacer(Modifier.height(8.dp))
+            }
+            GoBackButton(onGoBackToSleep)
         }
-        Spacer(Modifier.weight(1f))
-        if (answer != null && state.replyTyped) {
-            Button(onClick = viewModel::continueAfterReply, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Continue") }
-            Spacer(Modifier.height(8.dp))
-        }
-        GoBackButton(onGoBackToSleep)
-    }
+    )
 }
 
 /** Step 4: pick how long. The line reminds you how many cheats this week already. */
 @Composable
 private fun BargainStep(info: LockScreenInfo, viewModel: LockViewModel, onGoBackToSleep: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(16.dp))
-        Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.HEAD_SHAKE, size = 140.dp)
-        Spacer(Modifier.height(24.dp))
-        Text(info.bargainLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(24.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            UnlockSteps.BARGAIN_MINUTES.forEachIndexed { index, minutes ->
-                SpringIn(index, Modifier.weight(1f)) {
-                    OutlinedButton(onClick = { viewModel.bargain(minutes) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                        Text("$minutes min", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
-                    }
+    StepLayout(
+        middle = {
+            Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.HEAD_SHAKE, size = 140.dp)
+            Spacer(Modifier.height(24.dp))
+            Text(info.bargainLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(24.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                UnlockSteps.BARGAIN_MINUTES.forEachIndexed { index, minutes ->
+                    SpringIn(index, Modifier.weight(1f)) { ChoiceButton("$minutes min") { viewModel.bargain(minutes) } }
                 }
             }
-        }
-        Spacer(Modifier.weight(1f))
-        GoBackButton(onGoBackToSleep)
-    }
+        },
+        bottom = { GoBackButton(onGoBackToSleep) }
+    )
 }
 
 /** Step 5: the mascot turns its back. Hold the button for 3 seconds; letting go starts again. */
 @Composable
 private fun LastChanceStep(info: LockScreenInfo, minutes: Int, onHoldCompleted: () -> Unit, onGoBackToSleep: () -> Unit) {
-    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Spacer(Modifier.height(16.dp))
-        Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.TURN_AWAY, size = 140.dp)
-        Spacer(Modifier.height(24.dp))
-        Text(info.lastChanceLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
-        Spacer(Modifier.weight(1f))
-        HoldButton(label = "Hold to open ${info.appName} for $minutes min", onDone = onHoldCompleted)
-        Spacer(Modifier.height(8.dp))
-        GoBackButton(onGoBackToSleep)
+    StepLayout(
+        middle = {
+            Mascot(mood = MascotMood.NEUTRAL, reaction = MascotReaction.TURN_AWAY, size = 140.dp)
+            Spacer(Modifier.height(24.dp))
+            Text(info.lastChanceLine, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
+        },
+        bottom = {
+            HoldButton(label = "Hold to open ${info.appName} for $minutes min", onDone = onHoldCompleted)
+            Spacer(Modifier.height(8.dp))
+            GoBackButton(onGoBackToSleep)
+        }
+    )
+}
+
+/** An answer or a bargain choice: black inside, a bright white border, white text. */
+@Composable
+private fun ChoiceButton(label: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        border = BorderStroke(CHOICE_BORDER, MaterialTheme.colorScheme.onBackground),
+        modifier = Modifier.fillMaxWidth().height(56.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onBackground)
     }
 }
+
+private val CHOICE_BORDER = 1.5.dp
 
 /** Pops its content in with a bouncy spring, one after another by [index]. */
 @Composable
@@ -304,7 +343,7 @@ private fun HoldButton(label: String, onDone: () -> Unit) {
             .fillMaxWidth()
             .height(56.dp)
             .clip(shape)
-            .border(1.dp, MaterialTheme.colorScheme.onSurfaceVariant, shape)
+            .border(CHOICE_BORDER, MaterialTheme.colorScheme.onBackground, shape)
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown()
