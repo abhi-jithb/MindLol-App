@@ -49,7 +49,7 @@ enum class LockStep(val number: Int) {
 enum class LockOutcome {
     /** Every step done: the app was opened for the chosen minutes. */
     UNLOCKED,
-    /** "Go back to sleep" pressed: the app was closed. */
+    /** "Go back to sleep" (or "Walk away" on a limit lock) pressed: the app was closed. */
     WENT_BACK,
     /** Left another way (Home, screen off, switched app) before finishing. */
     LEFT

@@ -168,7 +168,7 @@ class LockViewModel(private val repository: LiveLockRepository) : ViewModel() {
         }
     }
 
-    /** "Go back to sleep" or the back button. */
+    /** "Go back to sleep" / "Walk away", or the back button. */
     fun goBack() = end(LockOutcome.WENT_BACK)
 
     /** Left another way (Home, screen off, another app). LEFT is already the saved default. */

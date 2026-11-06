@@ -68,6 +68,8 @@ import com.abhijith.mindlol.ui.components.MascotMood
 import com.abhijith.mindlol.ui.components.MascotReaction
 import com.abhijith.mindlol.domain.CardReaction
 import com.abhijith.mindlol.domain.InterrogationCards
+import com.abhijith.mindlol.domain.LockLabels
+import com.abhijith.mindlol.domain.LockReason
 import com.abhijith.mindlol.domain.UnlockSteps
 import com.abhijith.mindlol.ui.theme.Motion
 import kotlinx.coroutines.delay
@@ -131,7 +133,7 @@ private fun StareStep(info: LockScreenInfo, countdownLeft: Int, onGoBackToSleep:
             Text(info.stareLine, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onBackground, textAlign = TextAlign.Center)
         },
         bottom = {
-            GoBackButton(onGoBackToSleep)
+            GoBackButton(info.reason, onGoBackToSleep)
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = onWantToCheat, enabled = countdownLeft == 0) {
                 Text(
@@ -180,7 +182,7 @@ private fun ConfessionStep(info: LockScreenInfo, viewModel: LockViewModel, onGoB
                 modifier = Modifier.fillMaxWidth().height(56.dp)
             ) { Text("Confess") }
             Spacer(Modifier.height(8.dp))
-            GoBackButton(onGoBackToSleep)
+            GoBackButton(info.reason, onGoBackToSleep)
         }
     )
 }
@@ -221,7 +223,7 @@ private fun InterrogationStep(info: LockScreenInfo, state: LockUiState, viewMode
                 Button(onClick = viewModel::continueAfterReply, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Continue") }
                 Spacer(Modifier.height(8.dp))
             }
-            GoBackButton(onGoBackToSleep)
+            GoBackButton(info.reason, onGoBackToSleep)
         }
     )
 }
@@ -241,7 +243,7 @@ private fun BargainStep(info: LockScreenInfo, viewModel: LockViewModel, onGoBack
                 }
             }
         },
-        bottom = { GoBackButton(onGoBackToSleep) }
+        bottom = { GoBackButton(info.reason, onGoBackToSleep) }
     )
 }
 
@@ -257,7 +259,7 @@ private fun LastChanceStep(info: LockScreenInfo, minutes: Int, onHoldCompleted: 
         bottom = {
             HoldButton(label = "Hold to open ${info.appName} for $minutes min", onDone = onHoldCompleted)
             Spacer(Modifier.height(8.dp))
-            GoBackButton(onGoBackToSleep)
+            GoBackButton(info.reason, onGoBackToSleep)
         }
     )
 }
@@ -377,8 +379,9 @@ private fun CardReaction.toMascot(): MascotReaction = when (this) {
 
 private const val SPRING_STAGGER_MS = 120L
 
+/** "Go back to sleep" at night, "Walk away" on a limit lock; both record WENT_BACK and go home. */
 @Composable
-private fun GoBackButton(onClick: () -> Unit) {
+private fun GoBackButton(reason: LockReason, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
@@ -387,7 +390,7 @@ private fun GoBackButton(onClick: () -> Unit) {
         ),
         modifier = Modifier.fillMaxWidth().height(64.dp)
     ) {
-        Text("Go back to sleep", style = MaterialTheme.typography.titleMedium)
+        Text(LockLabels.goBack(reason), style = MaterialTheme.typography.titleMedium)
     }
 }
 
