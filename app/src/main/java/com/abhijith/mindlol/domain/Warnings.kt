@@ -11,8 +11,20 @@ import java.time.format.DateTimeFormatter
 /** What will make the app in front lock, if it stays in front. */
 enum class LockCause { BEDTIME, LIMIT, GRANT_END }
 
-/** The app in front will lock at [atMillis] for [reason], because of [cause]. */
-data class UpcomingLock(val atMillis: Long, val reason: LockReason, val cause: LockCause)
+/**
+ * The app in front will lock at [atMillis] for [reason], because of [cause]. [periodDate] is the
+ * night (BEDTIME) or day (LIMIT) the lock belongs to.
+ */
+data class UpcomingLock(val atMillis: Long, val reason: LockReason, val cause: LockCause, val periodDate: LocalDate) {
+    /**
+     * The same lock as [other] for the pill's memory. A limit's lock time moves later whenever you
+     * leave the app (usage stops growing), so for a LIMIT only the day counts: its warnings show
+     * once per app per day. Bedtime and grant ends are fixed times.
+     */
+    fun sameAs(other: UpcomingLock): Boolean =
+        reason == other.reason && cause == other.cause && periodDate == other.periodDate &&
+            (cause == LockCause.LIMIT || atMillis == other.atMillis)
+}
 
 /** How the pill looks right now. */
 enum class PillMode {
@@ -70,7 +82,7 @@ object WarningPlanner {
      */
     fun pill(now: Long, upcoming: UpcomingLock?, memory: PillMemory?): PillPlan {
         if (upcoming == null || now >= upcoming.atMillis) return PillPlan(null, null, null)
-        var mem = if (memory?.lock == upcoming) memory else PillMemory(upcoming, firstSeenMillis = now)
+        var mem = if (memory != null && memory.lock.sameAs(upcoming)) memory.copy(lock = upcoming) else PillMemory(upcoming, firstSeenMillis = now)
         val left = upcoming.atMillis - now
         val isGrant = upcoming.cause == LockCause.GRANT_END
 

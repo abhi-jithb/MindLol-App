@@ -29,14 +29,14 @@ class WarningsTest {
 
     @Test
     fun lockedApp_beforeBedtime_locksAtBedtime() {
-        assertEquals(UpcomingLock(at(thu, 23), LockReason.BEDTIME, LockCause.BEDTIME), upcoming(INSTA, at(thu, 22, 40)))
+        assertEquals(UpcomingLock(at(thu, 23), LockReason.BEDTIME, LockCause.BEDTIME, thu), upcoming(INSTA, at(thu, 22, 40)))
     }
 
     @Test
     fun limitedApp_locksWhenItsUsageWouldPassTheLimit() {
         // 26 of 30 minutes used at 15:00: 4 more minutes in front, then over by 1 ms.
         val lock = upcoming(YT, at(thu, 15), used = minutes(26))
-        assertEquals(UpcomingLock(at(thu, 15, 4) + 1, LockReason.LIMIT, LockCause.LIMIT), lock)
+        assertEquals(UpcomingLock(at(thu, 15, 4) + 1, LockReason.LIMIT, LockCause.LIMIT, thu), lock)
     }
 
     @Test
@@ -50,7 +50,7 @@ class WarningsTest {
     @Test
     fun grantEndingInsideTheNight_locksAtTheGrantEnd() {
         val grant = UnlockGrant(INSTA, LockReason.BEDTIME, at(fri, 1), 5)
-        assertEquals(UpcomingLock(at(fri, 1, 5), LockReason.BEDTIME, LockCause.GRANT_END), upcoming(INSTA, at(fri, 1, 1), grants = listOf(grant), today = friDay))
+        assertEquals(UpcomingLock(at(fri, 1, 5), LockReason.BEDTIME, LockCause.GRANT_END, thu), upcoming(INSTA, at(fri, 1, 1), grants = listOf(grant), today = friDay))
     }
 
     @Test
@@ -62,12 +62,12 @@ class WarningsTest {
     @Test
     fun grantOnALimitedAppStillOverItsLimit_locksAtTheGrantEnd() {
         val grant = UnlockGrant(YT, LockReason.LIMIT, at(thu, 15), 5)
-        assertEquals(UpcomingLock(at(thu, 15, 5), LockReason.LIMIT, LockCause.GRANT_END), upcoming(YT, at(thu, 15, 1), used = minutes(40), grants = listOf(grant)))
+        assertEquals(UpcomingLock(at(thu, 15, 5), LockReason.LIMIT, LockCause.GRANT_END, thu), upcoming(YT, at(thu, 15, 1), used = minutes(40), grants = listOf(grant)))
     }
 
     // ---------- Pill: warnings at 5:00 and 1:00 ----------
 
-    private val bedtimeLock = UpcomingLock(at(thu, 23), LockReason.BEDTIME, LockCause.BEDTIME)
+    private val bedtimeLock = UpcomingLock(at(thu, 23), LockReason.BEDTIME, LockCause.BEDTIME, thu)
 
     @Test
     fun noPill_untilFiveMinutesLeft_thenAWarningThatStaysUntilTapped() {
@@ -117,7 +117,7 @@ class WarningsTest {
     @Test
     fun aDifferentLock_startsFresh() {
         val shown = WarningPlanner.pill(at(thu, 22, 55), bedtimeLock, null).memory
-        val other = UpcomingLock(at(thu, 23, 30), LockReason.BEDTIME, LockCause.BEDTIME)
+        val other = UpcomingLock(at(thu, 23, 30), LockReason.BEDTIME, LockCause.BEDTIME, thu)
         val plan = WarningPlanner.pill(at(thu, 22, 55), other, shown)
         assertNull(plan.mode)
         assertEquals(other, plan.memory?.lock)
@@ -131,7 +131,7 @@ class WarningsTest {
 
     // ---------- Pill during a grant: countdown, chip after 10 s ----------
 
-    private val grantLock = UpcomingLock(at(fri, 1, 5), LockReason.BEDTIME, LockCause.GRANT_END) // a 5-min grant from 01:00
+    private val grantLock = UpcomingLock(at(fri, 1, 5), LockReason.BEDTIME, LockCause.GRANT_END, thu) // a 5-min grant from 01:00
 
     @Test
     fun grant_countdownShrinksToAChipAfterTenSeconds() {
@@ -172,7 +172,7 @@ class WarningsTest {
 
     @Test
     fun tenMinuteGrant_warnsAtFiveAndAtOne() {
-        val lock = UpcomingLock(at(fri, 1, 10), LockReason.BEDTIME, LockCause.GRANT_END)
+        val lock = UpcomingLock(at(fri, 1, 10), LockReason.BEDTIME, LockCause.GRANT_END, thu)
         val first = WarningPlanner.pill(at(fri, 1), lock, null)
         assertEquals(PillMode.COUNTDOWN, first.mode)
         assertEquals(PillMode.WARNING, WarningPlanner.pill(at(fri, 1, 5), lock, first.memory).mode)
@@ -234,5 +234,32 @@ class WarningsTest {
         assertEquals("Bedtime in 15 min. Instagram locks at 23:00.", WarningText.bedtimeNotification(minutes(15), bed, listOf("Instagram")))
         assertEquals("Bedtime in 12 min. Instagram and 2 more lock at 23:00.", WarningText.bedtimeNotification(minutes(12), bed, listOf("Instagram", "YouTube", "Reddit")))
         assertEquals("Bedtime in 15 min. Instagram locks at 23:30.", WarningText.bedtimeNotification(minutes(15), LocalTime.of(23, 30), listOf("Instagram")))
+    }
+
+    // ---------- Same lock across reopenings ----------
+
+    @Test
+    fun limitWarning_showsOncePerAppPerDay_evenThoughItsLockTimeMovesWhenYouLeave() {
+        val first = UpcomingLock(at(thu, 15, 4), LockReason.LIMIT, LockCause.LIMIT, thu)
+        val shown = WarningPlanner.pill(at(thu, 15), first, null)
+        assertEquals(PillMode.WARNING, shown.mode)
+        val gotIt = WarningPlanner.tap(at(thu, 15, 0, 5), requireNotNull(shown.memory), PillMode.WARNING)
+        // Left for an hour; back with the same 4 minutes left, so the lock time is an hour later.
+        val later = UpcomingLock(at(thu, 16, 4), LockReason.LIMIT, LockCause.LIMIT, thu)
+        val back = WarningPlanner.pill(at(thu, 16), later, gotIt)
+        assertNull(back.mode)
+        assertEquals(later, back.memory?.lock) // memory follows the new time
+        // Tomorrow's limit is a different lock: it warns again.
+        val tomorrow = UpcomingLock(at(fri, 15, 4), LockReason.LIMIT, LockCause.LIMIT, fri)
+        assertEquals(PillMode.WARNING, WarningPlanner.pill(at(fri, 15), tomorrow, back.memory).mode)
+    }
+
+    @Test
+    fun bedtimeAndGrantLocks_areOnlyTheSameAtTheSameTime() {
+        val a = UpcomingLock(at(thu, 23), LockReason.BEDTIME, LockCause.BEDTIME, thu)
+        assertTrue(a.sameAs(a.copy()))
+        assertFalse(a.sameAs(a.copy(atMillis = at(thu, 23, 30))))
+        val g = UpcomingLock(at(fri, 1, 5), LockReason.BEDTIME, LockCause.GRANT_END, thu)
+        assertFalse(g.sameAs(g.copy(atMillis = at(fri, 1, 15)))) // a new grant starts fresh
     }
 }

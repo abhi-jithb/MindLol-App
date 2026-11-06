@@ -15,6 +15,11 @@ import com.abhijith.mindlol.MindLolApplication
 import com.abhijith.mindlol.data.repository.LiveLockRepository
 import com.abhijith.mindlol.domain.LiveLockDecider
 import com.abhijith.mindlol.domain.LockDecision
+import com.abhijith.mindlol.domain.PillMemory
+import com.abhijith.mindlol.domain.PillMode
+import com.abhijith.mindlol.domain.UpcomingLock
+import com.abhijith.mindlol.domain.WarningPlanner
+import com.abhijith.mindlol.domain.WarningText
 import com.abhijith.mindlol.ui.lock.LockActivity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -54,6 +59,15 @@ class LockAccessibilityService : AccessibilityService() {
     private var recheckJob: Job? = null
     // True while our lock screen covers lastPackage.
     private var lockShowing = false
+
+    // ---------- Warning pill (Step 3, W2) ----------
+    private var pill: WarningPill? = null
+    private var pillJob: Job? = null
+    /** What the pill remembers per app (thresholds shown, "Got it", chip timing). Memory only. */
+    private val pillMemory = mutableMapOf<String, PillMemory>()
+    /** The app, lock and mode the pill is showing now; used when it's tapped. */
+    private var pillTarget: Pair<String, UpcomingLock>? = null
+    private var pillMode: PillMode? = null
     private var receiverRegistered = false
     // Apps and the home screen; null until worked out (it lists installed apps, so it runs off the main thread).
     private var tracked: Set<String>? = null
@@ -88,10 +102,12 @@ class LockAccessibilityService : AccessibilityService() {
             }
             scope.launch(Dispatchers.IO) { tracked = repo.trackedPackages() }
         }
+        guarded("create warning pill") { pill = WarningPill(this) { guarded("pill tap") { onPillTapped() } } }
         guarded("register screen receiver") {
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
             }
             ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
             receiverRegistered = true
@@ -127,17 +143,22 @@ class LockAccessibilityService : AccessibilityService() {
         if (known != null && pkg !in known) return
         // Our own lock screen: the covered app stays "in front" (lastPackage), so it's checked again
         // when the lock closes without a grant (screen off) or when the app comes back.
-        if (pkg == packageName && event.className?.toString() == LockActivity::class.java.name) {
+        val className = event.className?.toString()
+        if (pkg == packageName && className == LockActivity::class.java.name) {
             lockShowing = true
             recheckJob?.cancel()
+            stopPill()
             return
         }
+        // Our own non-screen windows (the warning pill is a TextView overlay) are not "MindLol opened".
+        if (pkg == packageName && className?.startsWith("$packageName.") != true) return
         // The same app, still in front. After a lock screen it's decided again (a grant may now exist).
         if (pkg == lastPackage && !lockShowing) return
         lockShowing = false
         lastPackage = pkg
-        // A new app is in front: any timer for the previous one no longer applies.
+        // A new app is in front: any timer or pill for the previous one no longer applies.
         recheckJob?.cancel()
+        stopPill()
         scope.launch { decideAndAct(pkg, "opened") }
     }
 
@@ -160,6 +181,7 @@ class LockAccessibilityService : AccessibilityService() {
             is LockDecision.Lock -> {
                 Log.w(TAG, "LOCK $pkg (${decision.reason}, period ${decision.periodDate}, $why)")
                 // Allowed from the background because the system has bound this accessibility service.
+                stopPill()
                 guarded("open lock screen") {
                     startActivity(LockActivity.intent(this@LockAccessibilityService, pkg, decision.reason, decision.periodDate))
                 }
@@ -167,7 +189,10 @@ class LockAccessibilityService : AccessibilityService() {
             is LockDecision.Allow -> {
                 val at = decision.recheckAtMillis
                 Log.w(TAG, "allow $pkg ($why), recheck at $at")
-                if (at != null) scheduleRecheck(pkg, at)
+                if (at != null) {
+                    scheduleRecheck(pkg, at)
+                    startPill(pkg)
+                }
             }
         }
     }
@@ -186,6 +211,82 @@ class LockAccessibilityService : AccessibilityService() {
         }
     }
 
+    /** Works out the pill for [pkg] (in front, allowed, with a lock coming) and keeps it up to date. */
+    private fun startPill(pkg: String) {
+        pillJob?.cancel()
+        val repo = repository ?: return
+        pillJob = scope.launch {
+            val upcoming = try {
+                repo.upcomingLock(pkg)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Live lock: upcoming lock for $pkg failed, no pill", e)
+                null
+            } ?: return@launch
+            runPill(pkg, upcoming)
+        }
+    }
+
+    /**
+     * The pill loop. Asks WarningPlanner what to show; while the pill is visible it updates the
+     * countdown once a second, otherwise it sleeps until the next change (a threshold, the chip).
+     * Ends when the app changes, the lock screen opens, or the screen is off.
+     */
+    private suspend fun runPill(pkg: String, upcoming: UpcomingLock) {
+        val view = pill ?: return
+        while (true) {
+            if (lastPackage != pkg || lockShowing || !isUsable()) {
+                hidePill()
+                return
+            }
+            val now = System.currentTimeMillis()
+            val plan = WarningPlanner.pill(now, upcoming, pillMemory[pkg])
+            plan.memory?.let { pillMemory[pkg] = it }
+            val mode = plan.mode
+            if (mode == null) {
+                hidePill()
+                val next = plan.nextChangeAtMillis ?: return
+                delay((next - now).coerceAtLeast(MIN_PILL_DELAY_MS))
+                continue
+            }
+            val left = upcoming.atMillis - now
+            if (!view.show(WarningText.pill(mode, left), mode)) {
+                // W3 adds the fallback notification for limits here.
+                Log.w(TAG, "Warning pill for $pkg couldn't show ($mode, ${WarningText.countdown(left)} left)")
+                return
+            }
+            if (pillMode != mode) Log.w(TAG, "pill $pkg: $mode, ${WarningText.countdown(left)} left (${upcoming.cause})")
+            pillTarget = pkg to upcoming
+            pillMode = mode
+            // Wake at the next whole second of the countdown, so "4:59" ticks exactly.
+            delay((left % 1_000).let { if (it == 0L) 1_000L else it }.coerceAtLeast(MIN_PILL_DELAY_MS))
+        }
+    }
+
+    /** "Got it" on a warning, shrink a full countdown, or expand the chip; then redraw at once. */
+    private fun onPillTapped() {
+        val (pkg, upcoming) = pillTarget ?: return
+        val mode = pillMode ?: return
+        val memory = pillMemory[pkg] ?: return
+        pillMemory[pkg] = WarningPlanner.tap(System.currentTimeMillis(), memory, mode)
+        Log.w(TAG, "pill $pkg tapped ($mode)")
+        pillJob?.cancel()
+        pillJob = scope.launch { runPill(pkg, upcoming) }
+    }
+
+    private fun stopPill() {
+        pillJob?.cancel()
+        pillJob = null
+        hidePill()
+    }
+
+    private fun hidePill() {
+        pill?.hide()
+        pillTarget = null
+        pillMode = null
+    }
+
     /** The screen is on and past the phone's own lock screen, so a lock screen can actually be seen. */
     private fun isUsable(): Boolean =
         getSystemService(PowerManager::class.java)?.isInteractive == true &&
@@ -200,6 +301,10 @@ class LockAccessibilityService : AccessibilityService() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             guarded("screen broadcast") {
+                if (intent.action == Intent.ACTION_SCREEN_OFF) {
+                    stopPill() // nobody can see it; unlocking the phone decides again
+                    return
+                }
                 val pkg = lastPackage ?: return
                 if (intent.action == Intent.ACTION_SCREEN_ON && !isUsable()) return // USER_PRESENT will follow
                 recheckJob?.cancel()
@@ -230,6 +335,7 @@ class LockAccessibilityService : AccessibilityService() {
         // Stop the relock timer and the screen receiver even if the session row was never saved.
         recheckJob?.cancel()
         heartbeatJob?.cancel()
+        stopPill()
         _running.value = false
         if (receiverRegistered) {
             receiverRegistered = false
@@ -245,6 +351,7 @@ class LockAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "LiveLock"
+        private const val MIN_PILL_DELAY_MS = 50L
 
         // True while the service runs in this process. Read by the off-time detection and,
         // later, by Settings' "Live lock" row.

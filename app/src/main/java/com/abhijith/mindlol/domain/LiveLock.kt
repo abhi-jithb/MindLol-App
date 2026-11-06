@@ -174,7 +174,7 @@ object LiveLockDecider {
                         d.reason == LockReason.BEDTIME -> LockCause.BEDTIME
                         else -> LockCause.LIMIT
                     }
-                    return UpcomingLock(at, d.reason, cause)
+                    return UpcomingLock(at, d.reason, cause, d.periodDate)
                 }
                 is LockDecision.Allow -> {
                     val next = d.recheckAtMillis ?: return null

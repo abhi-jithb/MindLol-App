@@ -23,6 +23,9 @@ import com.abhijith.mindlol.domain.RoastGenerator
 import com.abhijith.mindlol.domain.SleepTime
 import com.abhijith.mindlol.domain.LockDecision
 import com.abhijith.mindlol.domain.PeriodKind
+import com.abhijith.mindlol.domain.RulesSnapshot
+import com.abhijith.mindlol.domain.UnlockGrant
+import com.abhijith.mindlol.domain.UpcomingLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -74,25 +77,46 @@ class LiveLockRepository(
     fun trackedPackages(): Set<String> =
         appNames.launcherApps().map { it.packageName }.toSet() + reader.excludedPackages - systemApps.notApps()
 
+    /** Everything a decision needs, read once: the same facts serve decide() and upcomingLock(). */
+    private class Facts(
+        val night: RulesSnapshot?,
+        val day: RulesSnapshot?,
+        val usedTodayMs: Long,
+        val grants: List<UnlockGrant>
+    )
+
+    private suspend fun facts(packageName: String, nowMillis: Long): Facts {
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
+        // The night that contains now, or else the next one (so Allow can say when bedtime starts).
+        val nights = stored.filter { it.kind == PeriodKind.NIGHT && it.endMillis > nowMillis }
+        val night = nights.firstOrNull { it.startMillis <= nowMillis } ?: nights.minByOrNull { it.startMillis }
+        val day = stored.firstOrNull { it.kind == PeriodKind.DAY && it.date == today }
+
+        // Today's usage is only read when this app has a limit today (it costs one event query).
+        val usedTodayMs = if (day?.limits?.containsKey(packageName) == true) {
+            reader.readSessions(day.startMillis, nowMillis)
+                .filter { it.packageName == packageName }
+                .sumOf { it.endMillis - it.startMillis }
+        } else 0L
+
+        // Grants last at most 10 minutes, so only recent ones can still be running.
+        val grants = lockDao.grantsSince(nowMillis - MAX_GRANT_MS).mapNotNull { it.toGrant() }
+        return Facts(night, day, usedTodayMs, grants)
+    }
+
     suspend fun decide(packageName: String, nowMillis: Long = System.currentTimeMillis()): LockDecision =
         withContext(Dispatchers.IO) {
-            val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
-            val stored = rulesDao.periodsFrom(today.minusDays(1)).map { it.toDomain() }
-            // The night that contains now, or else the next one (so Allow can say when bedtime starts).
-            val nights = stored.filter { it.kind == PeriodKind.NIGHT && it.endMillis > nowMillis }
-            val night = nights.firstOrNull { it.startMillis <= nowMillis } ?: nights.minByOrNull { it.startMillis }
-            val day = stored.firstOrNull { it.kind == PeriodKind.DAY && it.date == today }
+            val f = facts(packageName, nowMillis)
+            LiveLockDecider.decide(packageName, nowMillis, f.night, f.day, f.usedTodayMs, f.grants, neverLockable)
+        }
 
-            // Today's usage is only read when this app has a limit today (it costs one event query).
-            val usedTodayMs = if (day?.limits?.containsKey(packageName) == true) {
-                reader.readSessions(day.startMillis, nowMillis)
-                    .filter { it.packageName == packageName }
-                    .sumOf { it.endMillis - it.startMillis }
-            } else 0L
-
-            // Grants last at most 10 minutes, so only recent ones can still be running.
-            val grants = lockDao.grantsSince(nowMillis - MAX_GRANT_MS).mapNotNull { it.toGrant() }
-            LiveLockDecider.decide(packageName, nowMillis, night, day, usedTodayMs, grants, neverLockable)
+    /** When the app in front will lock if it stays in front (for the warning pill), or null. */
+    suspend fun upcomingLock(packageName: String, nowMillis: Long = System.currentTimeMillis()): UpcomingLock? =
+        withContext(Dispatchers.IO) {
+            if (packageName in neverLockable) return@withContext null
+            val f = facts(packageName, nowMillis)
+            LiveLockDecider.upcomingLock(packageName, nowMillis, f.night, f.day, f.usedTodayMs, f.grants, neverLockable)
         }
 
     /** Saves a new session at connect time and returns its id. */
